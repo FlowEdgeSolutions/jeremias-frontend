@@ -1,73 +1,156 @@
-# Welcome to your Lovable project
+# Jeremias CRM & Kundenportal - Frontend
 
-## Project info
+Moderne React-basierte Webanwendung für das Jeremias CRM-System mit integriertem Kundenportal.
 
-**URL**: https://lovable.dev/projects/adbd891c-e043-43dd-bc38-13925878813b
+## 📋 Projektbeschreibung
 
-## How can I edit this code?
+**Jeremias** ist ein Full-Stack CRM- und Kundenportal-System für ein Unternehmen im Bereich energietechnischer Dienstleistungen (3D-Modellierung, Heizlastberechnungen, Energieberatung, etc.).
 
-There are several ways of editing your application.
+Das Frontend bietet zwei Hauptbereiche:
 
-**Use Lovable**
+### 🔧 Internes CRM (`/app`)
+- **Lead-Management**: Kanban-Board mit Drag & Drop für Lead-Tracking
+- **Kundenverwaltung**: Detaillierte Kundenansicht mit Pipeline-Stages
+- **Projektverwaltung**: Übersicht und Verwaltung aller Kundenprojekte
+- **Finanzen**: Rechnungsübersicht und Finanz-Metriken
+- **Quality Control**: QC-Dashboard für Projektfreigaben
+- **Projektregeln**: Konfiguration der Auto-Assignment-Regeln
+- **Audio-Transkription**: Integration mit Azure OpenAI Whisper
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/adbd891c-e043-43dd-bc38-13925878813b) and start prompting.
+### 👤 Kundenportal (`/portal`)
+- **Dashboard**: Übersicht über eigene Projekte und Rechnungen
+- **Projekte**: Einsicht in alle beauftragten Projekte mit Nachrichten-Funktion
+- **Neue Bestellung**: Formular für neue Projektbestellungen
+- **Rechnungen**: Übersicht über alle Rechnungen
+- **Account-Verwaltung**: Profil und Einstellungen
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🚀 Setup & Installation
 
-**Use your preferred IDE**
+### Voraussetzungen
+- Node.js (v18 oder höher)
+- npm oder bun
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### Installation
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+# Repository klonen
+git clone https://github.com/FlowEdgeSolutions/jeremiasCrmFrontend.git
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+# In das Projektverzeichnis wechseln
+cd jeremiasCrmFrontend
 
-# Step 3: Install the necessary dependencies.
-npm i
+# Dependencies installieren
+npm install
+# oder
+bun install
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Development-Server starten
 npm run dev
+# oder
+bun run dev
 ```
 
-**Edit a file directly in GitHub**
+Das Frontend läuft dann auf: **http://localhost:5173**
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### Backend-Verbindung
 
-**Use GitHub Codespaces**
+Das Frontend benötigt eine laufende Backend-API. Die API-URL ist konfiguriert in:
+- `src/lib/apiClient.ts` → `API_BASE_URL`
+- Standard: `http://localhost:8080/api`
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## 🛠️ Technologie-Stack
 
-## What technologies are used for this project?
+Dieses Projekt nutzt moderne Web-Technologien:
 
-This project is built with:
+### Core
+- **React 18** - UI-Framework
+- **TypeScript** - Type-Safe JavaScript
+- **Vite** - Schneller Build-Tool & Dev-Server
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Styling & UI
+- **Tailwind CSS** - Utility-First CSS Framework
+- **Shadcn/UI** - Komponentenbibliothek basierend auf Radix UI
+- **Lucide React** - Icon-System
 
-## How can I deploy this project?
+### State Management & Routing
+- **React Router v6** - Client-Side Routing
+- **TanStack Query (React Query)** - Server State Management
+- **Context API** - Globaler State (Auth, Theme)
 
-Simply open [Lovable](https://lovable.dev/projects/adbd891c-e043-43dd-bc38-13925878813b) and click on Share -> Publish.
+### Formulare & Validierung
+- **React Hook Form** - Formular-Management
+- **Zod** - Schema-Validierung
 
-## Can I connect a custom domain to my Lovable project?
+### Weitere Libraries
+- **@dnd-kit** - Drag & Drop für Kanban-Board
+- **Sonner** - Toast-Benachrichtigungen
+- **date-fns** - Datums-Utilities
+- **Recharts** - Diagramme & Charts
 
-Yes, you can!
+## 📁 Projektstruktur
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```
+src/
+├── components/
+│   ├── layouts/          # Layout-Komponenten (AppLayout, PortalLayout)
+│   ├── ui/               # Shadcn/UI Komponenten
+│   ├── KanbanBoard.tsx   # Drag & Drop Kanban
+│   └── StatCard.tsx      # Dashboard-Karten
+├── contexts/
+│   ├── AuthContext.tsx   # Authentifizierungs-State
+│   └── ThemeContext.tsx  # Theme (Dark/Light Mode)
+├── lib/
+│   ├── apiClient.ts      # REST API Client
+│   └── utils.ts          # Utility-Funktionen
+├── pages/
+│   ├── app/              # Interne CRM-Seiten
+│   └── portal/           # Kundenportal-Seiten
+├── types/
+│   └── index.ts          # TypeScript-Typdefinitionen
+└── App.tsx               # Haupt-App-Komponente mit Routing
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 🎨 Features
+
+- ✅ **Dark/Light Mode** - Theme-Toggle
+- ✅ **Responsive Design** - Mobile, Tablet, Desktop
+- ✅ **Rollenbasierte Navigation** - Admin, Sales, Project Member, Customer
+- ✅ **Drag & Drop Kanban** - Lead-Management
+- ✅ **Real-time Updates** - React Query
+- ✅ **Form Validation** - Zod Schema Validation
+- ✅ **Toast Notifications** - Benutzer-Feedback
+- ✅ **Collapsible Sidebar** - Platzsparendes Design
+
+## 🔧 Verfügbare Scripts
+
+```bash
+# Development-Server starten
+npm run dev
+
+# Production-Build erstellen
+npm run build
+
+# Production-Build testen
+npm run preview
+
+# Linting
+npm run lint
+```
+
+## 🔗 Backend-Integration
+
+Das Frontend kommuniziert mit dem FastAPI-Backend über REST API.
+
+**Backend-Repository**: [FlowEdgeSolutions/jeremiasCrmBackend](https://github.com/FlowEdgeSolutions/jeremiasCrmBackend)
+
+**API-Endpunkte**:
+- `/api/auth` - Authentifizierung
+- `/api/leads` - Lead-Management
+- `/api/customers` - Kundenverwaltung
+- `/api/projects` - Projektverwaltung
+- `/api/invoices` - Rechnungswesen
+- `/api/qc` - Quality Control
+
+## 📝 Lizenz
+
+© 2024 FlowEdge Solutions. Alle Rechte vorbehalten.
