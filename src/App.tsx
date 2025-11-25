@@ -13,9 +13,12 @@ import { LeadsPage } from "@/pages/app/LeadsPage";
 import { CustomersPage } from "@/pages/app/CustomersPage";
 import { CustomerDetailPage } from "@/pages/app/CustomerDetailPage";
 import { ProjectsPage } from "@/pages/app/ProjectsPage";
+import { ProjectDetailPage } from "@/pages/app/ProjectDetailPage";
 import { FinancePage } from "@/pages/app/FinancePage";
 import { QualityPage } from "@/pages/app/QualityPage";
 import { RulesPage } from "@/pages/app/RulesPage";
+import { EmailsPage } from "@/pages/app/EmailsPage";
+import { EmailCallbackPage } from "@/pages/app/EmailCallbackPage";
 import { ApiTestPage } from "@/pages/app/ApiTestPage";
 import { ProfilePage } from "@/pages/app/ProfilePage";
 
@@ -54,9 +57,12 @@ const App = () => (
               <Route path="customers" element={<CustomersPage />} />
               <Route path="customers/:id" element={<CustomerDetailPage />} />
               <Route path="projects" element={<ProjectsPage />} />
+              <Route path="projects/:id" element={<ProjectDetailPage />} />
               <Route path="finance" element={<FinancePage />} />
               <Route path="quality" element={<QualityPage />} />
               <Route path="rules" element={<RulesPage />} />
+              <Route path="emails" element={<EmailsPage />} />
+              <Route path="emails/callback" element={<EmailCallbackPage />} />
               <Route path="api-test" element={<ApiTestPage />} />
               <Route path="profile" element={<ProfilePage />} />
             </Route>

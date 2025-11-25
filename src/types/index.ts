@@ -35,8 +35,11 @@ export interface User {
 export interface Customer {
   id: string;
   name: string;
+  first_name?: string;
+  last_name?: string;
   email: string;
   phone?: string;
+  company_name?: string;
   segment: Segment;
   stage: PipelineStage;
   order_count: number;
@@ -56,10 +59,17 @@ export interface Project {
   customer_id: string;
   product_code: string;
   product_name: string;
+  project_number?: string;
   status: ProjectStatus;
   qc_status: QcStatus;
   assigned_user_ids?: string[];
-  payload?: Record<string, any>;
+  credits?: string;
+  credit_factor?: string;
+  content?: string;
+  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
+  customer_notes?: string;
+  internal_notes?: string;
+  payload?: Record<string, unknown>;
   created_at: string;
   updated_at: string;
   // Legacy frontend fields for compatibility
@@ -167,6 +177,9 @@ export interface CustomerDetails {
   };
   metrics: {
     total_revenue: number;
+    average_monthly_revenue?: number;
+    average_two_months?: number;
+    trend_percent?: number;
     last_activity?: string;
     days_since_activity?: number;
     activity_status: 'green' | 'yellow' | 'red';

@@ -17,7 +17,8 @@ import {
   X,
   Sun,
   Moon,
-  FlaskConical
+  FlaskConical,
+  Mail
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +70,7 @@ export const AppLayout = () => {
     ] : []),
     { path: "/app/quality", label: "Qualität", icon: CheckCircle2 },
     ...(isAdmin ? [
+      { path: "/app/emails", label: "E-Mails", icon: Mail },
       { path: "/app/rules", label: "Projektregeln", icon: Settings },
       { path: "/app/api-test", label: "API Test", icon: FlaskConical },
     ] : []),

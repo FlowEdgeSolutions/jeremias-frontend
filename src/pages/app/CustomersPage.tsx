@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Unlock } from "lucide-react";
+import { Unlock, List, PhoneCall, Target, Star, UserCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 
 const segmentLabels: Record<Segment, string> = {
@@ -35,6 +35,24 @@ const stageLabels: Record<PipelineStage, string> = {
   BESTANDSKUNDE: "Bestandskunde",
 };
 
+const STAGE_ICONS: Record<PipelineStage, React.ComponentType<{ className?: string }>> = {
+  LEAD_LIST: List,
+  FOLLOW_UP: PhoneCall,
+  PRE_STAGE: Target,
+  STAGE: Star,
+  KUNDE: UserCheck,
+  BESTANDSKUNDE: Users,
+};
+
+const STAGE_ICON_COLORS: Record<PipelineStage, string> = {
+  LEAD_LIST: "text-gray-500",
+  FOLLOW_UP: "text-blue-500",
+  PRE_STAGE: "text-yellow-500",
+  STAGE: "text-sky-400",
+  KUNDE: "text-green-500",
+  BESTANDSKUNDE: "text-purple-500",
+};
+
 export const CustomersPage = () => {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -52,8 +70,9 @@ export const CustomersPage = () => {
         segment: selectedSegment !== "ALL" ? selectedSegment : undefined,
       });
       setCustomers(data);
-    } catch (error: any) {
-      toast.error("Fehler beim Laden der Kunden: " + (error.message || "Unbekannter Fehler"));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Laden der Kunden: " + message);
     } finally {
       setIsLoading(false);
     }
@@ -70,8 +89,9 @@ export const CustomersPage = () => {
         </div>
       );
       loadCustomers();
-    } catch (error: any) {
-      toast.error("Fehler beim Freischalten: " + (error.message || "Unbekannter Fehler"));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Freischalten: " + message);
     }
   };
 
@@ -80,8 +100,9 @@ export const CustomersPage = () => {
       await apiClient.customers.changeStage(customerId, newStage);
       toast.success(`Kunde zu "${stageLabels[newStage]}" verschoben`);
       loadCustomers();
-    } catch (error: any) {
-      toast.error("Fehler beim Verschieben: " + (error.message || "Unbekannter Fehler"));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Verschieben: " + message);
     }
   };
 
@@ -107,11 +128,21 @@ export const CustomersPage = () => {
       <CardContent className="p-4">
         <div className="space-y-2">
           <div className="flex items-start justify-between">
-            <h4 className="font-semibold text-foreground">{customer.name}</h4>
+            <div>
+              {customer.first_name && customer.last_name ? (
+                <>
+                  <h4 className="font-semibold text-foreground">{customer.first_name} {customer.last_name}</h4>
+                  {customer.company_name && (
+                    <p className="text-sm text-muted-foreground">{customer.company_name}</p>
+                  )}
+                </>
+              ) : (
+                <h4 className="font-semibold text-foreground">{customer.name}</h4>
+              )}
+            </div>
             <Badge variant="secondary" className="text-xs">{segmentLabels[customer.segment]}</Badge>
           </div>
           <div className="text-sm text-muted-foreground space-y-1">
-            <p>{customer.email}</p>
             <div className="flex items-center justify-between pt-2">
               <span>{customer.order_count || 0} Bestellungen</span>
               <span className="font-medium text-foreground">{(customer.total_revenue || 0).toLocaleString("de-DE")} €</span>
@@ -140,15 +171,31 @@ export const CustomersPage = () => {
           >
             <SelectTrigger className="w-full h-8 text-xs">
               <SelectValue>
-                Phase: {stageLabels[customer.stage]}
+                {(() => {
+                  const Icon = STAGE_ICONS[customer.stage];
+                  const iconColor = STAGE_ICON_COLORS[customer.stage];
+                  return (
+                    <div className="flex items-center gap-2">
+                      <Icon className={`h-3 w-3 ${iconColor}`} />
+                      <span>{stageLabels[customer.stage]}</span>
+                    </div>
+                  );
+                })()}
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {Object.entries(stageLabels).map(([key, label]) => (
-                <SelectItem key={key} value={key} className="text-xs">
-                  {label}
-                </SelectItem>
-              ))}
+              {Object.entries(stageLabels).map(([key, label]) => {
+                const Icon = STAGE_ICONS[key as PipelineStage];
+                const iconColor = STAGE_ICON_COLORS[key as PipelineStage];
+                return (
+                  <SelectItem key={key} value={key} className="text-xs">
+                    <div className="flex items-center gap-2">
+                      <Icon className={`h-3 w-3 ${iconColor}`} />
+                      <span>{label}</span>
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -185,23 +232,30 @@ export const CustomersPage = () => {
             </div>
           ) : (
             <div className="flex gap-4 overflow-x-auto pb-4">
-              {kanbanColumns.map((column) => (
-                <div key={column.id} className="flex-shrink-0 w-80">
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <h3 className="font-semibold mb-4">{column.title} ({column.items.length})</h3>
-                    <div className="space-y-3">
-                      {column.items.map((customer) => (
-                        <div key={customer.id}>
-                          {renderKanbanCard(customer)}
-                        </div>
-                      ))}
-                      {column.items.length === 0 && (
-                        <p className="text-sm text-muted-foreground text-center py-8">Keine Kunden</p>
-                      )}
+              {kanbanColumns.map((column) => {
+                const Icon = STAGE_ICONS[column.id as PipelineStage];
+                const iconColor = STAGE_ICON_COLORS[column.id as PipelineStage];
+                return (
+                  <div key={column.id} className="flex-shrink-0 w-80">
+                    <div className="bg-muted/50 rounded-lg p-4">
+                      <div className="flex items-center gap-2 mb-4">
+                        <Icon className={`h-5 w-5 ${iconColor}`} />
+                        <h3 className="font-semibold">{column.title} ({column.items.length})</h3>
+                      </div>
+                      <div className="space-y-3">
+                        {column.items.map((customer) => (
+                          <div key={customer.id}>
+                            {renderKanbanCard(customer)}
+                          </div>
+                        ))}
+                        {column.items.length === 0 && (
+                          <p className="text-sm text-muted-foreground text-center py-8">Keine Kunden</p>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </TabsContent>
@@ -232,7 +286,16 @@ export const CustomersPage = () => {
                       <Badge variant="secondary">{segmentLabels[customer.segment]}</Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline">{stageLabels[customer.stage]}</Badge>
+                      {(() => {
+                        const Icon = STAGE_ICONS[customer.stage];
+                        const iconColor = STAGE_ICON_COLORS[customer.stage];
+                        return (
+                          <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                            <Icon className={`h-3 w-3 ${iconColor}`} />
+                            {stageLabels[customer.stage]}
+                          </Badge>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell className="text-right">{customer.order_count || 0}</TableCell>
                     <TableCell className="text-right font-medium whitespace-nowrap">

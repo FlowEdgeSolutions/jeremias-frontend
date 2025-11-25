@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Project, ProjectStatus, User } from "@/types";
 import { apiClient } from "@/api/mockApiClient";
 import { useAuth } from "@/contexts/AuthContext";
@@ -29,6 +30,7 @@ const statusColors: Record<ProjectStatus, string> = {
 
 export const ProjectsPage = () => {
   const { currentUser } = useAuth();
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("ALL");
@@ -69,26 +71,43 @@ export const ProjectsPage = () => {
     const assignedUsers = users.filter(u => project.assignedUserIds.includes(u.id));
     
     return (
-      <Card className="hover:shadow-md transition-shadow">
+      <Card 
+        className="hover:shadow-md transition-shadow cursor-pointer"
+        onClick={() => navigate(`/app/projects/${project.id}`)}
+      >
         <CardContent className="p-4">
           <div className="space-y-3">
             <div>
-              <h4 className="font-semibold text-foreground">{project.productName}</h4>
-              <p className="text-sm text-muted-foreground mt-1">{project.customerName}</p>
+              <div className="flex items-center justify-between">
+                <h4 className="font-semibold text-foreground">{project.productName}</h4>
+                {project.project_number && (
+                  <span className="text-xs text-muted-foreground">{project.project_number}</span>
+                )}
+              </div>
+              <p className="text-sm text-muted-foreground mt-1">
+                {project.customerName}
+              </p>
+              {project.credits && (
+                <p className="text-xs font-medium text-primary mt-1">
+                  {project.credits} Credits
+                </p>
+              )}
             </div>
             
             <Badge className={statusColors[project.status]}>
               {statusLabels[project.status]}
             </Badge>
 
-            <div className="flex items-center gap-2">
-              {assignedUsers.map((user) => (
-                <Avatar key={user.id} className="h-7 w-7">
-                  <AvatarFallback className="text-xs bg-primary text-primary-foreground">
-                    {user.name.split(' ').map(n => n[0]).join('')}
-                  </AvatarFallback>
-                </Avatar>
-              ))}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {assignedUsers.map((user) => (
+                  <Avatar key={user.id} className="h-7 w-7">
+                    <AvatarFallback className="text-xs bg-primary text-primary-foreground">
+                      {user.name.split(' ').map(n => n[0]).join('')}
+                    </AvatarFallback>
+                  </Avatar>
+                ))}
+              </div>
             </div>
           </div>
         </CardContent>

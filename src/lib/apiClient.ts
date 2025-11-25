@@ -15,7 +15,7 @@ import {
   InvoiceStatus
 } from "@/types";
 
-const API_BASE_URL = "http://localhost:8080/api";
+const API_BASE_URL = "http://127.0.0.1:8000/api";
 const TOKEN_KEY = "jeremia_token";
 
 // Error handling
@@ -303,6 +303,12 @@ export const customersApi = {
     });
   },
 
+  async deleteCustomer(id: string): Promise<void> {
+    return fetchApi<void>(`/customers/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   // Notes
   async getNotes(customerId: string): Promise<Note[]> {
     return fetchApi<Note[]>(`/customers/${customerId}/notes`);
@@ -343,7 +349,7 @@ export interface ProjectCreateRequest {
   customer_id: string;
   product_code: string;
   product_name: string;
-  payload?: Record<string, any>;
+  payload?: Record<string, unknown>;
 }
 
 export interface ProjectUpdateRequest {
@@ -351,7 +357,7 @@ export interface ProjectUpdateRequest {
   product_name?: string;
   status?: ProjectStatus;
   qc_status?: QcStatus;
-  payload?: Record<string, any>;
+  payload?: Record<string, unknown>;
 }
 
 export const projectsApi = {

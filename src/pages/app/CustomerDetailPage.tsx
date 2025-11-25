@@ -10,10 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Target, Star, UserCheck, Users, Mic, MicOff, Activity } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Target, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X } from "lucide-react";
 
 const PRODUCT_LABELS: Record<string, string> = {
   "3D_MODELLIERUNG_HUELLE": "3D Modellierung (nur thermische Hülle)",
@@ -60,6 +62,37 @@ const STAGE_ICONS: Record<PipelineStage, React.ComponentType<{ className?: strin
   BESTANDSKUNDE: Users,
 };
 
+interface EmailDetail {
+  id: string;
+  thread_id: string;
+  subject: string;
+  from: string;
+  from_name: string;
+  to: string;
+  cc: string[];
+  bcc: string[];
+  date: string;
+  snippet: string;
+  body_html: string;
+  body_text: string;
+  is_read: boolean;
+  has_attachments: boolean;
+  attachments: Array<{
+    id: string;
+    filename: string;
+    mime_type: string;
+    size: number;
+  }>;
+  labels: string[];
+}
+
+interface Signature {
+  id: string;
+  name: string;
+  content: string;
+  isDefault?: boolean;
+}
+
 const STAGE_ICON_COLORS: Record<PipelineStage, string> = {
   LEAD_LIST: "text-gray-500",
   FOLLOW_UP: "text-blue-500",
@@ -97,8 +130,23 @@ export const CustomerDetailPage = () => {
   });
   const [editingField, setEditingField] = useState<string | null>(null);
   const [tempValue, setTempValue] = useState<string>("");
+  const [saveTimeout, setSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [customerEmails, setCustomerEmails] = useState<EmailDetail[]>([]);
+  const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
+  const [showReplyBox, setShowReplyBox] = useState(false);
+  const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+  const [signatures, setSignatures] = useState<Signature[]>([]);
+  const [selectedSignatureId, setSelectedSignatureId] = useState<string>("");
+  const [showSignatureDialog, setShowSignatureDialog] = useState(false);
+  const [newSignature, setNewSignature] = useState({ name: "", content: "" });
+  const [composeForm, setComposeForm] = useState({
+    to: "",
+    subject: "",
+    body: "",
+  });
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
   useEffect(() => {
     console.log("CustomerDetailPage mounted, ID:", id);
@@ -108,7 +156,14 @@ export const CustomerDetailPage = () => {
       return;
     }
     loadData();
+    loadSignatures();
   }, [id]);
+
+  useEffect(() => {
+    if (details?.customer.email) {
+      loadCustomerEmails();
+    }
+  }, [details]);
   
   const loadData = async () => {
     if (!id) return;
@@ -131,12 +186,20 @@ export const CustomerDetailPage = () => {
           invoicesApi.getInvoices({ customer_id: id }),
         ]),
         timeout(10000) // 10 Sekunden Timeout
-      ]) as [any, any, any, any];
+      ]) as [CustomerDetails, Note[], Project[], Invoice[]];
       
       console.log("Customer details loaded:", detailsData);
       console.log("Notes loaded:", notesData);
       console.log("Projects loaded:", projectsData);
       console.log("Invoices loaded:", invoicesData);
+      
+      // Check if there are unsaved changes in localStorage
+      const savedData = localStorage.getItem(`customer_${id}`);
+      if (savedData) {
+        const parsedData = JSON.parse(savedData);
+        console.log('Found unsaved data in localStorage:', parsedData);
+        detailsData.customer = { ...detailsData.customer, ...parsedData };
+      }
       
       setDetails(detailsData);
       setNotes(notesData);
@@ -154,6 +217,178 @@ export const CustomerDetailPage = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadSignatures = () => {
+    const saved = localStorage.getItem("email_signatures");
+    if (saved) {
+      setSignatures(JSON.parse(saved));
+    }
+  };
+
+  const saveSignature = () => {
+    if (!newSignature.name.trim() || !newSignature.content.trim()) {
+      toast.error("Bitte Name und Signatur ausfüllen");
+      return;
+    }
+
+    const signature: Signature = {
+      id: Date.now().toString(),
+      name: newSignature.name,
+      content: newSignature.content,
+      isDefault: signatures.length === 0,
+    };
+
+    const updated = [...signatures, signature];
+    setSignatures(updated);
+    localStorage.setItem("email_signatures", JSON.stringify(updated));
+    
+    setNewSignature({ name: "", content: "" });
+    setShowSignatureDialog(false);
+    toast.success("Signatur gespeichert!");
+  };
+
+  const deleteSignature = (id: string) => {
+    const updated = signatures.filter(s => s.id !== id);
+    setSignatures(updated);
+    localStorage.setItem("email_signatures", JSON.stringify(updated));
+    toast.success("Signatur gelöscht");
+  };
+
+  const setDefaultSignature = (id: string) => {
+    const updated = signatures.map(s => ({
+      ...s,
+      isDefault: s.id === id,
+    }));
+    setSignatures(updated);
+    localStorage.setItem("email_signatures", JSON.stringify(updated));
+    toast.success("Standard-Signatur gesetzt");
+  };
+
+  const loadCustomerEmails = async () => {
+    if (!details?.customer.email) return;
+    
+    try {
+      const response = await fetch("http://127.0.0.1:8080/api/gmail/emails", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+        },
+      });
+      
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      // Filter emails by customer email
+      const filtered = data.emails.filter((email: EmailDetail) => 
+        email.from === details.customer.email || email.to === details.customer.email
+      );
+      setCustomerEmails(filtered);
+    } catch (error) {
+      console.error("Error loading customer emails:", error);
+    }
+  };
+
+  const loadEmailDetails = async (emailId: string) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:8080/api/gmail/emails/${emailId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+        },
+      });
+      const data = await response.json();
+      setSelectedEmail(data);
+      setShowReplyBox(false);
+    } catch (error) {
+      toast.error("Fehler beim Laden der E-Mail");
+    }
+  };
+
+  const replyToEmail = () => {
+    if (selectedEmail) {
+      const quotedText = selectedEmail.body_text.split("\n").join("\n> ");
+      const defaultSig = signatures.find(s => s.isDefault);
+      const replyBody = `
+
+---
+Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEmail.from_name}:
+> ${quotedText}`;
+      
+      setComposeForm({
+        to: selectedEmail.from,
+        subject: selectedEmail.subject.startsWith("Re: ") 
+          ? selectedEmail.subject 
+          : `Re: ${selectedEmail.subject}`,
+        body: defaultSig ? replyBody + "\n\n" + defaultSig.content : replyBody,
+      });
+      if (defaultSig) {
+        setSelectedSignatureId(defaultSig.id);
+      }
+      setShowReplyBox(true);
+    }
+  };
+
+  const insertSignature = () => {
+    if (!selectedSignatureId) return;
+    
+    const signature = signatures.find(s => s.id === selectedSignatureId);
+    if (signature) {
+      setComposeForm({
+        ...composeForm,
+        body: composeForm.body + "\n\n" + signature.content,
+      });
+    }
+  };
+
+  const handleSendEmail = async () => {
+    try {
+      if (!composeForm.to || !composeForm.subject) {
+        toast.error("Bitte fülle Empfänger und Betreff aus");
+        return;
+      }
+
+      const response = await fetch("http://127.0.0.1:8080/api/gmail/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+        },
+        body: JSON.stringify({
+          to: composeForm.to,
+          subject: composeForm.subject,
+          body: composeForm.body,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Fehler beim Senden");
+      }
+
+      toast.success("E-Mail erfolgreich gesendet!");
+      setShowReplyBox(false);
+      setComposeForm({
+        to: "",
+        subject: "",
+        body: "",
+      });
+      loadCustomerEmails();
+    } catch (error) {
+      toast.error("Fehler beim Senden der E-Mail");
+      console.error(error);
+    }
+  };
+
+  const formatEmailDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 60) return `vor ${diffMins}m`;
+    if (diffHours < 24) return `vor ${diffHours}h`;
+    if (diffDays < 7) return `vor ${diffDays}d`;
+    return date.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
   };
   
   const handleCreateNote = async () => {
@@ -285,11 +520,58 @@ export const CustomerDetailPage = () => {
     setTempValue(currentValue || "");
   };
   
+  const handleFieldChange = (fieldName: string, value: string) => {
+    setTempValue(value);
+    
+    // Sofort in localStorage speichern
+    if (id && details) {
+      const customerData = {
+        ...details.customer,
+        [fieldName]: value,
+      };
+      localStorage.setItem(`customer_${id}`, JSON.stringify(customerData));
+      
+      // Lokalen State sofort aktualisieren
+      setDetails({
+        ...details,
+        customer: customerData,
+      });
+    }
+    
+    // Clear existing timeout
+    if (saveTimeout) {
+      clearTimeout(saveTimeout);
+    }
+    
+    // Set new timeout to save to database after 1 second of no typing
+    const timeout = setTimeout(async () => {
+      if (!id || !details) return;
+      
+      try {
+        const updateData: Record<string, string> = { [fieldName]: value };
+        console.log('Updating field in DB:', fieldName, 'with value:', value);
+        const response = await customersApi.updateCustomer(id, updateData);
+        console.log('DB Update response:', response);
+        
+        // Nach erfolgreichem DB-Update localStorage aufräumen
+        localStorage.removeItem(`customer_${id}`);
+        
+        toast.success(`${fieldName} gespeichert`, { duration: 1000 });
+      } catch (error: unknown) {
+        console.error('Error updating field in DB:', error);
+        const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+        toast.error("Fehler beim Speichern: " + message);
+      }
+    }, 1000);
+    
+    setSaveTimeout(timeout);
+  };
+  
   const handleFieldSave = async (fieldName: string) => {
     if (!id || !details) return;
     
     try {
-      const updateData: any = { [fieldName]: tempValue };
+      const updateData: Record<string, string> = { [fieldName]: tempValue };
       await customersApi.updateCustomer(id, updateData);
       toast.success("Feld aktualisiert");
       setEditingField(null);
@@ -305,10 +587,22 @@ export const CustomerDetailPage = () => {
     setTempValue("");
   };
   
+  const handleDeleteCustomer = async () => {
+    if (!id) return;
+    
+    try {
+      await customersApi.deleteCustomer(id);
+      toast.success("Kunde erfolgreich gelöscht");
+      setDeleteDialogOpen(false);
+      navigate("/app/customers");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Löschen: " + message);
+    }
+  };
+  
   const handleFieldKeyDown = (e: React.KeyboardEvent, fieldName: string) => {
-    if (e.key === "Enter") {
-      handleFieldSave(fieldName);
-    } else if (e.key === "Escape") {
+    if (e.key === "Escape") {
       handleFieldCancel();
     }
   };
@@ -323,9 +617,9 @@ export const CustomerDetailPage = () => {
           <div className="flex gap-2 mt-1">
             <Input
               value={tempValue}
-              onChange={(e) => setTempValue(e.target.value)}
+              onChange={(e) => handleFieldChange(fieldName, e.target.value)}
               onKeyDown={(e) => handleFieldKeyDown(e, fieldName)}
-              onBlur={() => handleFieldSave(fieldName)}
+              onBlur={() => setEditingField(null)}
               autoFocus
               className="h-8"
             />
@@ -385,6 +679,7 @@ export const CustomerDetailPage = () => {
   }
   
   return (
+    <TooltipProvider>
     <div className="container mx-auto p-6 space-y-6">
       {/* Header - Name, Firmenname, Phase, Letzte Rechnung, Gesamtumsatz */}
       <div className="bg-muted border rounded-lg p-6">
@@ -400,14 +695,40 @@ export const CustomerDetailPage = () => {
               )}
             </div>
           </div>
-          {details.customer.stage === "BESTANDSKUNDE" && (
-            <Badge className={`${getActivityBadgeColor(details.metrics.activity_status)} text-white`}>
-              {getDaysAgoText(details.metrics.days_since_activity)}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {details.customer.stage === "BESTANDSKUNDE" && (
+              <Badge className={`${getActivityBadgeColor(details.metrics.activity_status)} text-white`}>
+                {getDaysAgoText(details.metrics.days_since_activity)}
+              </Badge>
+            )}
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="destructive" size="sm">
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Kunde löschen
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Kunde wirklich löschen?</DialogTitle>
+                  <DialogDescription>
+                    Möchten Sie den Kunden "{details.customer.name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+                    Abbrechen
+                  </Button>
+                  <Button variant="destructive" onClick={handleDeleteCustomer}>
+                    Endgültig löschen
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
         
-        <div className="grid grid-cols-3 gap-6 mt-6">
+        <div className="grid grid-cols-5 gap-6 mt-6">
           <div>
             <p className="text-sm text-muted-foreground">Phase</p>
             <Select
@@ -454,19 +775,85 @@ export const CustomerDetailPage = () => {
               </SelectContent>
             </Select>
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Letzte Rechnung</p>
-            <p className="font-medium text-base">
-              {details.metrics.last_activity 
-                ? getDaysAgoText(details.metrics.days_since_activity)
-                : "-"}
-            </p>
+          <div className="space-y-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-sm text-muted-foreground cursor-help">Gesamtumsatz</p>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">Summe aller bezahlten Rechnungen seit Kundenbeginn</p>
+              </TooltipContent>
+            </Tooltip>
+            <p className="font-semibold text-lg">{formatCurrency(details.metrics.total_revenue)}</p>
           </div>
-          <div>
-            <p className="text-sm text-muted-foreground">Gesamtumsatz</p>
-            <p className="font-medium text-base">{formatCurrency(details.metrics.total_revenue)}</p>
+          <div className="space-y-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-sm text-muted-foreground cursor-help">⌀ Monatsumsatz (gesamt)</p>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">Durchschnittlicher monatlicher Umsatz über die gesamte Kundenzeit</p>
+              </TooltipContent>
+            </Tooltip>
+            <p className="font-semibold text-lg">{formatCurrency(details.metrics.average_monthly_revenue || 0)}</p>
+          </div>
+          <div className="space-y-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-sm text-muted-foreground cursor-help">⌀ Monatsumsatz (2 Mon.)</p>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">Durchschnittlicher monatlicher Umsatz der letzten 2 Monate (60 Tage)</p>
+              </TooltipContent>
+            </Tooltip>
+            <p className="font-semibold text-lg">{formatCurrency(details.metrics.average_two_months || 0)}</p>
+          </div>
+          <div className="space-y-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <p className="text-sm text-muted-foreground cursor-help">Trend</p>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="max-w-xs">
+                  Vergleich: Durchschnitt letzte 2 Monate vs. Gesamtdurchschnitt
+                  <br />
+                  <span className="text-green-600">Grün = Wachstum</span> | <span className="text-red-600">Rot = Rückgang</span>
+                </p>
+              </TooltipContent>
+            </Tooltip>
+            <div className="flex items-center gap-2">
+              {(() => {
+                const trend = details.metrics.trend_percent || 0;
+                const isPositive = trend >= 0;
+                const TrendIcon = isPositive ? TrendingUp : TrendingDown;
+                const colorClass = isPositive ? "text-green-600" : "text-red-600";
+                const bgClass = isPositive ? "bg-green-50" : "bg-red-50";
+                
+                return (
+                  <div className={`flex items-center gap-1 px-2 py-1 rounded ${bgClass}`}>
+                    <TrendIcon className={`h-4 w-4 ${colorClass}`} />
+                    <span className={`font-semibold ${colorClass}`}>
+                      {isPositive ? '+' : ''}{trend.toFixed(1)}%
+                    </span>
+                  </div>
+                );
+              })()}
+            </div>
           </div>
         </div>
+        
+        {/* Letzte Rechnung - Prominente Anzeige */}
+        {details.metrics.last_activity && (
+          <div className="mt-4 pt-4 border-t flex items-center gap-3">
+            <Clock className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm text-muted-foreground">Letzte Rechnung</p>
+              <p className="font-medium">
+                {getDaysAgoText(details.metrics.days_since_activity)}
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content: Links scrollbar, Rechts fixiert */}
@@ -547,13 +934,120 @@ export const CustomerDetailPage = () => {
 
         {/* Rechte Seite: Fixiertes Menü */}
         <div className="col-span-5">
-          <Tabs defaultValue="notizen" className="w-full">
-            <TabsList className="w-full grid grid-cols-4 gap-1">
+          <Tabs defaultValue="verlauf" className="w-full">
+            <TabsList className="w-full grid grid-cols-5 gap-1">
+              <TabsTrigger value="verlauf">Verlauf & E-Mail</TabsTrigger>
               <TabsTrigger value="notizen">Notizen</TabsTrigger>
               <TabsTrigger value="rechnungen">Rechnungen</TabsTrigger>
               <TabsTrigger value="projekte">Projekte</TabsTrigger>
-              <TabsTrigger value="emails">E-Mails</TabsTrigger>
+              <TabsTrigger value="emails" className="relative">
+                E-Mails
+                {customerEmails.filter(e => !e.is_read).length > 0 && (
+                  <Badge className="ml-2 bg-red-500 text-white px-1.5 py-0.5 text-xs">
+                    {customerEmails.filter(e => !e.is_read).length}
+                  </Badge>
+                )}
+              </TabsTrigger>
             </TabsList>
+
+            {/* Verlauf Tab - Timeline (nur Anzeige) */}
+            <TabsContent value="verlauf" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg">Verlauf & Aktivitäten</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4 max-h-[600px] overflow-y-auto">
+                    {/* Combine all activities and sort by date */}
+                    {[
+                      ...notes.map(note => ({ type: 'note', data: note, date: note.created_at })),
+                      ...invoices.map(inv => ({ type: 'invoice', data: inv, date: inv.created_at })),
+                      ...customerEmails.map(email => ({ type: 'email', data: email, date: email.date })),
+                    ]
+                      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+                      .map((activity, index) => (
+                        <div key={`${activity.type}-${index}`} className="relative pl-8 pb-4 border-l-2 border-muted last:border-0">
+                          {/* Timeline dot */}
+                          <div className="absolute left-[-9px] top-0 w-4 h-4 rounded-full bg-background border-2 border-emerald-500"></div>
+                          
+                          {/* Activity content */}
+                          <div className="bg-muted/30 rounded-lg p-4">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {activity.type === 'note' && (
+                                  <>
+                                    <MessageSquare className="h-4 w-4 text-blue-500" />
+                                    <span className="font-semibold text-sm">Notiz</span>
+                                  </>
+                                )}
+                                {activity.type === 'invoice' && (
+                                  <>
+                                    <DollarSign className="h-4 w-4 text-green-500" />
+                                    <span className="font-semibold text-sm">Rechnung</span>
+                                  </>
+                                )}
+                                {activity.type === 'email' && (
+                                  <>
+                                    <Mail className="h-4 w-4 text-purple-500" />
+                                    <span className="font-semibold text-sm">E-Mail</span>
+                                  </>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(activity.date).toLocaleString("de-DE", {
+                                  day: "2-digit",
+                                  month: "short",
+                                  year: "numeric",
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                            </div>
+                            
+                            {/* Note */}
+                            {activity.type === 'note' && (
+                              <p className="text-sm">{(activity.data as Note).text}</p>
+                            )}
+                            
+                            {/* Invoice */}
+                            {activity.type === 'invoice' && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm font-medium">
+                                    {formatCurrency((activity.data as Invoice).amount)}
+                                  </span>
+                                  <Badge variant={(activity.data as Invoice).status === "PAID" ? "default" : "secondary"}>
+                                    {(activity.data as Invoice).status}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Email */}
+                            {activity.type === 'email' && (
+                              <div className="space-y-1">
+                                <p className="text-sm font-medium">{(activity.data as EmailDetail).subject}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Von: {(activity.data as EmailDetail).from_name}
+                                </p>
+                                <p className="text-xs text-muted-foreground truncate">
+                                  {(activity.data as EmailDetail).snippet}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    
+                    {notes.length === 0 && invoices.length === 0 && customerEmails.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        Noch keine Aktivitäten vorhanden
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             {/* Notizen Tab */}
             <TabsContent value="notizen" className="mt-4">
@@ -734,22 +1228,258 @@ export const CustomerDetailPage = () => {
               </Card>
             </TabsContent>
 
-            {/* E-Mails Tab */}
+            {/* E-Mails Tab - Liste mit expandierbaren Emails */}
             <TabsContent value="emails" className="mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-lg">E-Mails</CardTitle>
+                  <CardTitle className="text-lg">E-Mails von {details.customer.name}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground text-center py-8">
-                    E-Mail-Funktion kommt später
-                  </p>
+                  <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                    {customerEmails.length > 0 ? (
+                      customerEmails.map((email) => (
+                        <div 
+                          key={email.id} 
+                          className={`border rounded-lg ${
+                            !email.is_read ? 'bg-blue-50 border-blue-300' : ''
+                          }`}
+                        >
+                          {/* Email Header - Klickbar */}
+                          <div
+                            onClick={() => {
+                              if (expandedEmailId === email.id) {
+                                setExpandedEmailId(null);
+                                setShowReplyBox(false);
+                              } else {
+                                loadEmailDetails(email.id);
+                                setExpandedEmailId(email.id);
+                              }
+                            }}
+                            className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <Mail className={`h-4 w-4 ${
+                                  !email.is_read ? 'text-blue-600' : 'text-purple-500'
+                                }`} />
+                                <p className={`font-medium text-sm ${
+                                  !email.is_read ? 'font-bold' : ''
+                                }`}>
+                                  {email.subject}
+                                </p>
+                                {!email.is_read && (
+                                  <Badge variant="default" className="bg-blue-500 text-white text-xs px-2 py-0">
+                                    Neu
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="text-xs text-muted-foreground">
+                                {formatEmailDate(email.date)}
+                              </span>
+                            </div>
+                            <p className="text-xs text-muted-foreground">Von: {email.from_name}</p>
+                            <p className="text-xs text-muted-foreground truncate mt-1">{email.snippet}</p>
+                          </div>
+
+                          {/* Expanded Email Content */}
+                          {expandedEmailId === email.id && selectedEmail && (
+                            <div className="px-4 pb-4 space-y-4 border-t bg-muted/20">
+                              {/* Email Body */}
+                              <div className="pt-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
+                                    {selectedEmail.from_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">{selectedEmail.from_name}</p>
+                                    <p className="text-xs text-muted-foreground">{selectedEmail.from}</p>
+                                  </div>
+                                </div>
+                                <div
+                                  className="prose prose-sm max-w-none"
+                                  dangerouslySetInnerHTML={{ __html: selectedEmail.body_html || selectedEmail.body_text }}
+                                />
+                              </div>
+
+                              {/* Reply Button */}
+                              {!showReplyBox && (
+                                <Button onClick={replyToEmail} variant="outline" size="sm" className="w-full">
+                                  <Reply className="h-4 w-4 mr-2" />
+                                  Antworten
+                                </Button>
+                              )}
+
+                              {/* Reply Form */}
+                              {showReplyBox && (
+                                <div className="space-y-3 bg-background p-4 rounded-lg border">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="font-semibold text-sm">Antwort verfassen</h4>
+                                    <Button onClick={() => setShowReplyBox(false)} variant="ghost" size="sm">
+                                      Abbrechen
+                                    </Button>
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">An</Label>
+                                    <Input
+                                      type="email"
+                                      value={composeForm.to}
+                                      onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">Betreff</Label>
+                                    <Input
+                                      value={composeForm.subject}
+                                      onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">Nachricht</Label>
+                                    <textarea
+                                      className="w-full min-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                                      value={composeForm.body}
+                                      onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
+                                      placeholder="Deine Nachricht..."
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">Signatur</Label>
+                                    <div className="flex gap-2">
+                                      <Select value={selectedSignatureId} onValueChange={setSelectedSignatureId}>
+                                        <SelectTrigger className="flex-1 h-8 text-sm">
+                                          <SelectValue placeholder="Signatur wählen" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {signatures.map((sig) => (
+                                            <SelectItem key={sig.id} value={sig.id}>
+                                              {sig.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button onClick={insertSignature} variant="outline" size="sm" disabled={!selectedSignatureId}>
+                                        Einfügen
+                                      </Button>
+                                      <Button onClick={() => setShowSignatureDialog(true)} variant="outline" size="sm">
+                                        <Plus className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex gap-2">
+                                    <Button onClick={() => setShowReplyBox(false)} variant="outline" size="sm" className="flex-1">
+                                      Abbrechen
+                                    </Button>
+                                    <Button onClick={handleSendEmail} size="sm" className="flex-1 bg-emerald-500 hover:bg-emerald-600">
+                                      <Mail className="h-4 w-4 mr-2" />
+                                      Senden
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center py-8">
+                        Keine E-Mails mit diesem Kunden gefunden
+                      </p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
           </Tabs>
         </div>
       </div>
+
+      {/* Signature Management Dialog */}
+      <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Signaturen verwalten</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-6 py-4">
+            {/* Add New Signature */}
+            <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+              <h3 className="font-semibold">Neue Signatur erstellen</h3>
+              <div className="space-y-3">
+                <div className="space-y-2">
+                  <Label>Name *</Label>
+                  <Input
+                    value={newSignature.name}
+                    onChange={(e) => setNewSignature({ ...newSignature, name: e.target.value })}
+                    placeholder="z.B. Geschäftlich, Privat, Support..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Signatur *</Label>
+                  <textarea
+                    value={newSignature.content}
+                    onChange={(e) => setNewSignature({ ...newSignature, content: e.target.value })}
+                    placeholder="Mit freundlichen Grüßen,\nMax Mustermann\nTelefon: +49 123 456789"
+                    className="w-full min-h-[120px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <Button onClick={saveSignature} className="w-full bg-emerald-500 hover:bg-emerald-600">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Signatur speichern
+                </Button>
+              </div>
+            </div>
+            
+            {/* Existing Signatures */}
+            <div className="space-y-3">
+              <h3 className="font-semibold">Gespeicherte Signaturen</h3>
+              {signatures.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">Noch keine Signaturen vorhanden</p>
+              ) : (
+                <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                  {signatures.map((sig) => (
+                    <div key={sig.id} className="p-3 border rounded-lg">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2 flex-1">
+                          <Button 
+                            onClick={() => setDefaultSignature(sig.id)} 
+                            variant="ghost" 
+                            size="sm" 
+                            className="h-8 w-8 p-0"
+                            title={sig.isDefault ? "Standard-Signatur" : "Als Standard setzen"}
+                          >
+                            <Star className={`h-4 w-4 ${sig.isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}`} />
+                          </Button>
+                          <p className="font-medium">{sig.name}</p>
+                          {sig.isDefault && (
+                            <Badge variant="secondary" className="text-xs">Standard</Badge>
+                          )}
+                        </div>
+                        <Button onClick={() => deleteSignature(sig.id)} variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <X className="h-4 w-4 text-red-500" />
+                        </Button>
+                      </div>
+                      <pre className="text-sm text-gray-600 whitespace-pre-wrap font-sans">{sig.content}</pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="flex justify-end pt-4">
+              <Button onClick={() => setShowSignatureDialog(false)} variant="outline">
+                Schließen
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
+    </TooltipProvider>
   );
 };
