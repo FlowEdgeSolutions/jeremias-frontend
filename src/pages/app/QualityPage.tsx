@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Project } from "@/types";
-import { apiClient } from "@/api/mockApiClient";
+import { qcApi } from "@/lib/apiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -9,57 +10,82 @@ import { toast } from "sonner";
 
 export const QualityPage = () => {
   const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     loadProjects();
   }, []);
 
   const loadProjects = async () => {
-    const data = await apiClient.getProjects();
-    setProjects(data);
+    try {
+      setLoading(true);
+      const data = await qcApi.getQcProjects("PENDING");
+      setProjects(data);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Laden: " + message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleApprove = async (projectId: string) => {
-    // TODO: Replace with actual API call
-    await apiClient.updateProjectStatus(projectId, "FERTIGGESTELLT", "APPROVED");
-    toast.success("Projekt freigegeben!");
-    loadProjects();
+    try {
+      await qcApi.approveProject(projectId);
+      toast.success("Projekt freigegeben!");
+      loadProjects();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler: " + message);
+    }
   };
 
   const handleReject = async (projectId: string) => {
-    // TODO: Replace with actual API call
-    await apiClient.updateProjectStatus(projectId, "REVISION", "REJECTED");
-    toast.info("Projekt zurück in Revision geschickt");
-    loadProjects();
+    try {
+      await qcApi.rejectProject(projectId);
+      toast.info("Projekt zurück in Revision geschickt");
+      loadProjects();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler: " + message);
+    }
   };
 
-  const pendingProjects = projects.filter(p => p.qcStatus === "PENDING");
+  const pendingProjects = projects.filter(p => 
+    (p.qc_status === "PENDING" || p.qcStatus === "PENDING") && 
+    p.status === "FERTIGGESTELLT"
+  );
 
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-2">Qualitätskontrolle</h2>
         <p className="text-muted-foreground">
-          {pendingProjects.length} {pendingProjects.length === 1 ? "Projekt wartet" : "Projekte warten"} auf Freigabe
+          {loading ? "Lade..." : `${pendingProjects.length} ${pendingProjects.length === 1 ? "Projekt wartet" : "Projekte warten"} auf Freigabe`}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {pendingProjects.map((project) => (
           <Card key={project.id}>
-            <CardHeader>
-              <CardTitle className="text-lg">{project.productName}</CardTitle>
+            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate(`/app/projects/${project.id}`)}>
+              <CardTitle className="text-lg text-primary hover:underline">{project.product_name || project.productName}</CardTitle>
               <p className="text-sm text-muted-foreground">{project.customerName}</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Produktcode:</span>
-                  <Badge variant="secondary">{project.productCode}</Badge>
+                  <Badge variant="secondary">{project.product_code || project.productCode}</Badge>
                 </div>
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Status:</span>
                   <Badge variant="outline">{project.status}</Badge>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Projektnummer:</span>
+                  <Badge variant="secondary">{project.project_number || "-"}</Badge>
                 </div>
               </div>
 
@@ -67,6 +93,7 @@ export const QualityPage = () => {
                 <Button
                   className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
                   onClick={() => handleApprove(project.id)}
+                  disabled={loading}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
                   Freigeben
@@ -75,6 +102,7 @@ export const QualityPage = () => {
                   className="flex-1"
                   variant="destructive"
                   onClick={() => handleReject(project.id)}
+                  disabled={loading}
                 >
                   <XCircle className="h-4 w-4 mr-2" />
                   Revision

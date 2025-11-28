@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Project, ProjectStatus, User } from "@/types";
-import { apiClient } from "@/api/mockApiClient";
+import { apiClient } from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -13,6 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { toast } from "sonner";
+import { Plus } from "lucide-react";
 
 const statusLabels: Record<ProjectStatus, string> = {
   IN_BEARBEITUNG: "In Bearbeitung",
@@ -40,35 +43,70 @@ export const ProjectsPage = () => {
   }, []);
 
   const loadData = async () => {
-    const [projectsData, usersData] = await Promise.all([
-      apiClient.getProjects(),
-      apiClient.getUsers(),
-    ]);
-    setProjects(projectsData);
-    setUsers(usersData.filter(u => u.role !== "customer"));
+    try {
+      const projectsData = await apiClient.projects.getProjects();
+      setProjects(projectsData);
+      // TODO: Load users from API when endpoint is available
+      setUsers([]);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Laden der Projekte: " + message);
+    }
   };
 
   const filteredProjects = projects.filter((project) => {
     // Project members see only their projects
     if (currentUser?.role === "project_member") {
-      return project.assignedUserIds.includes(currentUser.id);
+      return project.assigned_user_ids?.includes(currentUser.id) || false;
     }
     // Filter by selected user
     if (selectedUserId !== "ALL") {
-      return project.assignedUserIds.includes(selectedUserId);
+      return project.assigned_user_ids?.includes(selectedUserId) || false;
     }
     return true;
   });
 
+  const calculateRemainingDays = (deadline?: string) => {
+    if (!deadline) return null;
+    
+    const deadlineDate = new Date(deadline);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadlineDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = deadlineDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return diffDays;
+  };
+
+  const getRemainingDaysColor = (deadline?: string) => {
+    const days = calculateRemainingDays(deadline);
+    if (days === null) return "text-muted-foreground";
+    if (days < 0) return "text-red-600";
+    if (days <= 3) return "text-red-600";
+    if (days <= 5) return "text-yellow-600";
+    return "text-green-600";
+  };
+
+  const getRemainingDaysText = (deadline?: string) => {
+    const days = calculateRemainingDays(deadline);
+    if (days === null) return null;
+    if (days < 0) return `${Math.abs(days)} Tag${Math.abs(days) === 1 ? '' : 'e'} überfällig`;
+    if (days === 0) return "Heute fällig";
+    if (days === 1) return "Noch 1 Tag";
+    return `Noch ${days} Tage`;
+  };
+
   const kanbanColumns = [
     { id: "IN_BEARBEITUNG", title: "In Bearbeitung", items: filteredProjects.filter(p => p.status === "IN_BEARBEITUNG") },
-    { id: "REVISION", title: "Revision", items: filteredProjects.filter(p => p.status === "REVISION") },
-    { id: "FERTIGGESTELLT", title: "Fertiggestellt", items: filteredProjects.filter(p => p.status === "FERTIGGESTELLT") },
     { id: "PROBLEM", title: "Problem", items: filteredProjects.filter(p => p.status === "PROBLEM") },
+    { id: "FERTIGGESTELLT", title: "Fertiggestellt", items: filteredProjects.filter(p => p.status === "FERTIGGESTELLT") },
+    { id: "REVISION", title: "Revision", items: filteredProjects.filter(p => p.status === "REVISION") },
   ];
 
   const renderProjectCard = (project: Project) => {
-    const assignedUsers = users.filter(u => project.assignedUserIds.includes(u.id));
+    const assignedUsers = users.filter(u => project.assigned_user_ids?.includes(u.id));
     
     return (
       <Card 
@@ -79,17 +117,22 @@ export const ProjectsPage = () => {
           <div className="space-y-3">
             <div>
               <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-foreground">{project.productName}</h4>
+                <h4 className="font-semibold text-foreground">{project.product_name}</h4>
                 {project.project_number && (
                   <span className="text-xs text-muted-foreground">{project.project_number}</span>
                 )}
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                {project.customerName}
+                Kunde #{project.customer_id.slice(0, 8)}
               </p>
               {project.credits && (
                 <p className="text-xs font-medium text-primary mt-1">
                   {project.credits} Credits
+                </p>
+              )}
+              {project.deadline && (
+                <p className={`text-xs font-bold mt-1 ${getRemainingDaysColor(project.deadline)}`}>
+                  ⏰ {getRemainingDaysText(project.deadline)}
                 </p>
               )}
             </div>
@@ -117,24 +160,31 @@ export const ProjectsPage = () => {
 
   return (
     <div className="space-y-6">
-      {currentUser?.role === "admin" && (
-        <div className="flex items-center gap-4">
-          <label className="text-sm font-medium">Filter nach Mitarbeiter:</label>
-          <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-            <SelectTrigger className="w-[240px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">Alle Mitarbeiter</SelectItem>
-              {users.map((user) => (
-                <SelectItem key={user.id} value={user.id}>
-                  {user.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      )}
+      <div className="flex items-center justify-between">
+        {currentUser?.role === "admin" && (
+          <div className="flex items-center gap-4">
+            <label className="text-sm font-medium">Filter nach Mitarbeiter:</label>
+            <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+              <SelectTrigger className="w-[240px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="ALL">Alle Mitarbeiter</SelectItem>
+                {users.map((user) => (
+                  <SelectItem key={user.id} value={user.id}>
+                    {user.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        
+        <Button onClick={() => navigate("/app/projects/new")} className="ml-auto">
+          <Plus className="h-4 w-4 mr-2" />
+          Neues Projekt
+        </Button>
+      </div>
 
       <div className="flex gap-4 overflow-x-auto pb-4">
         {kanbanColumns.map((column) => (

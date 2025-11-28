@@ -5,7 +5,6 @@ import {
   Project, 
   Invoice, 
   Message, 
-  ProjectRule,
   User,
   Lead,
   PipelineStage,
@@ -14,9 +13,9 @@ import {
   Segment,
   InvoiceStatus
 } from "@/types";
+import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 
-const API_BASE_URL = "http://127.0.0.1:8000/api";
-const TOKEN_KEY = "jeremia_token";
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 // Error handling
 class ApiError extends Error {
@@ -349,14 +348,32 @@ export interface ProjectCreateRequest {
   customer_id: string;
   product_code: string;
   product_name: string;
+  product_specification?: string;
+  net_price?: string;
+  processing_days?: number;
+  credits?: string;
+  content?: string;
+  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
+  customer_notes?: string;
+  internal_notes?: string;
   payload?: Record<string, unknown>;
+  assigned_user_id: string;  // Required: Employee to assign
 }
 
 export interface ProjectUpdateRequest {
   product_code?: string;
   product_name?: string;
+  product_specification?: string;
+  net_price?: string;
+  processing_days?: number;
   status?: ProjectStatus;
   qc_status?: QcStatus;
+  credits?: string;
+  content?: string;
+  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
+  customer_notes?: string;
+  internal_notes?: string;
+  deadline?: string;
   payload?: Record<string, unknown>;
 }
 
@@ -500,41 +517,116 @@ export const qcApi = {
 };
 
 // ============================================================================
-// PROJECT RULES API
+// USERS API (Employees)
 // ============================================================================
 
-export interface ProjectRuleCreateRequest {
-  product_code: string;
-  product_name: string;
-  user_ids: string[];
+export interface EmployeeCredits {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  total_credits: number;
+  completed_projects: number;
+  in_progress_projects: number;
 }
 
-export const projectRulesApi = {
-  async getProjectRules(): Promise<ProjectRule[]> {
-    return fetchApi<ProjectRule[]>("/project-rules");
+export const usersApi = {
+  async getUsers(): Promise<User[]> {
+    return fetchApi<User[]>("/users");
   },
 
-  async getProjectRule(id: string): Promise<ProjectRule> {
-    return fetchApi<ProjectRule>(`/project-rules/${id}`);
+  async getEmployees(): Promise<User[]> {
+    return fetchApi<User[]>("/users/employees");
   },
 
-  async createProjectRule(data: ProjectRuleCreateRequest): Promise<ProjectRule> {
-    return fetchApi<ProjectRule>("/project-rules", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  async deleteProjectRule(id: string): Promise<void> {
-    return fetchApi<void>(`/project-rules/${id}`, {
-      method: "DELETE",
-    });
+  async getEmployeeCredits(): Promise<EmployeeCredits[]> {
+    return fetchApi<EmployeeCredits[]>("/users/credits");
   },
 };
 
 // ============================================================================
 // Export combined API client
 // ============================================================================
+
+// ============================================================================
+// PAYMENTS API (Stripe)
+// ============================================================================
+
+export type PaymentStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED" | "CANCELLED";
+
+export interface Payment {
+  id: string;
+  customer_id: string;
+  project_id?: string;
+  invoice_id?: string;
+  stripe_payment_intent_id?: string;
+  stripe_checkout_session_id?: string;
+  amount: number;
+  currency: string;
+  status: PaymentStatus;
+  description?: string;
+  product_name?: string;
+  payment_method?: string;
+  receipt_url?: string;
+  created_at: string;
+  paid_at?: string;
+}
+
+export interface PaymentSummary {
+  total_revenue: number;
+  total_pending: number;
+  total_refunded: number;
+  completed_count: number;
+  pending_count: number;
+  failed_count: number;
+}
+
+export interface CheckoutSessionRequest {
+  customer_id: string;
+  project_id?: string;
+  product_name: string;
+  amount: number;
+  success_url: string;
+  cancel_url: string;
+}
+
+export interface CheckoutSessionResponse {
+  checkout_url: string;
+  session_id: string;
+}
+
+export interface StripeConfig {
+  publishable_key: string;
+}
+
+export const paymentsApi = {
+  async getPayments(customerId?: string, status?: PaymentStatus): Promise<Payment[]> {
+    const params = new URLSearchParams();
+    if (customerId) params.append("customer_id", customerId);
+    if (status) params.append("status_filter", status);
+    const query = params.toString() ? `?${params.toString()}` : "";
+    return fetchApi<Payment[]>(`/payments${query}`);
+  },
+
+  async getPayment(id: string): Promise<Payment> {
+    return fetchApi<Payment>(`/payments/${id}`);
+  },
+
+  async getSummary(): Promise<PaymentSummary> {
+    return fetchApi<PaymentSummary>("/payments/summary");
+  },
+
+  async getStripeConfig(): Promise<StripeConfig> {
+    return fetchApi<StripeConfig>("/payments/config");
+  },
+
+  async createCheckoutSession(data: CheckoutSessionRequest): Promise<CheckoutSessionResponse> {
+    return fetchApi<CheckoutSessionResponse>("/payments/checkout", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+};
 
 export const apiClient = {
   auth: authApi,
@@ -544,7 +636,8 @@ export const apiClient = {
   invoices: invoicesApi,
   messages: messagesApi,
   qc: qcApi,
-  projectRules: projectRulesApi,
+  users: usersApi,
+  payments: paymentsApi,
 };
 
 export { ApiError, getToken, setToken, removeToken };

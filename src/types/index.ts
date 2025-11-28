@@ -66,9 +66,10 @@ export interface Project {
   credits?: string;
   credit_factor?: string;
   content?: string;
-  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
+  files?: Array<{id: string; filename: string; size: number; uploaded_at: string; source?: 'customer' | 'creation' | 'detail'}>;
   customer_notes?: string;
   internal_notes?: string;
+  deadline?: string;
   payload?: Record<string, unknown>;
   created_at: string;
   updated_at: string;

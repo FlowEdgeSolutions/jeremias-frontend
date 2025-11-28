@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Customer, Segment, PipelineStage } from "@/types";
+import {CustomerDetails, Customer, Segment, PipelineStage } from "@/types";
 import { apiClient } from "@/lib/apiClient";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";

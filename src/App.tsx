@@ -14,13 +14,14 @@ import { CustomersPage } from "@/pages/app/CustomersPage";
 import { CustomerDetailPage } from "@/pages/app/CustomerDetailPage";
 import { ProjectsPage } from "@/pages/app/ProjectsPage";
 import { ProjectDetailPage } from "@/pages/app/ProjectDetailPage";
+import { CreateProjectPage } from "@/pages/app/CreateProjectPage";
 import { FinancePage } from "@/pages/app/FinancePage";
 import { QualityPage } from "@/pages/app/QualityPage";
-import { RulesPage } from "@/pages/app/RulesPage";
+import { ArchivePage } from "@/pages/app/ArchivePage";
 import { EmailsPage } from "@/pages/app/EmailsPage";
 import { EmailCallbackPage } from "@/pages/app/EmailCallbackPage";
-import { ApiTestPage } from "@/pages/app/ApiTestPage";
 import { ProfilePage } from "@/pages/app/ProfilePage";
+import { UserManagementPage } from "@/pages/app/UserManagementPage";
 
 // Portal Pages
 import { PortalLoginPage } from "@/pages/portal/PortalLoginPage";
@@ -57,13 +58,14 @@ const App = () => (
               <Route path="customers" element={<CustomersPage />} />
               <Route path="customers/:id" element={<CustomerDetailPage />} />
               <Route path="projects" element={<ProjectsPage />} />
+              <Route path="projects/new" element={<CreateProjectPage />} />
               <Route path="projects/:id" element={<ProjectDetailPage />} />
               <Route path="finance" element={<FinancePage />} />
               <Route path="quality" element={<QualityPage />} />
-              <Route path="rules" element={<RulesPage />} />
+              <Route path="archive" element={<ArchivePage />} />
               <Route path="emails" element={<EmailsPage />} />
               <Route path="emails/callback" element={<EmailCallbackPage />} />
-              <Route path="api-test" element={<ApiTestPage />} />
+              <Route path="users" element={<UserManagementPage />} />
               <Route path="profile" element={<ProfilePage />} />
             </Route>
 

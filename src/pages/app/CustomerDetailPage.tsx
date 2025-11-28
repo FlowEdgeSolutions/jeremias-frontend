@@ -461,7 +461,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const response = await fetch('http://localhost:8080/api/transcribe-note', {
+      const response = await fetch('http://127.0.0.1:8080/api/transcribe-note', {
         method: 'POST',
         body: formData,
       });

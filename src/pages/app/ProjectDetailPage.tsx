@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { projectsApi, customersApi } from "@/lib/apiClient";
+import { projectsApi, customersApi, qcApi } from "@/lib/apiClient";
+import type { ProjectUpdateRequest } from "@/lib/apiClient";
 import { Project, Customer, ProjectStatus, User } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +11,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Upload, FileText, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Upload, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle } from "lucide-react";
 
 const STATUS_LABELS: Record<ProjectStatus, string> = {
   IN_BEARBEITUNG: "In Bearbeitung",
@@ -39,15 +42,54 @@ export const ProjectDetailPage = () => {
   const [projectNumber, setProjectNumber] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("IN_BEARBEITUNG");
   const [credits, setCredits] = useState("");
-  const [creditFactor, setCreditFactor] = useState("1");
   const [content, setContent] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
+  const [deadline, setDeadline] = useState<string>(""); // Frist/Deadline
+  
+  // Notes lists and input
+  const [customerNotesList, setCustomerNotesList] = useState<Array<{id: string; text: string; created_at: string}>>([]);
+  const [internalNotesList, setInternalNotesList] = useState<Array<{id: string; text: string; created_at: string}>>([]);
+  const [newCustomerNote, setNewCustomerNote] = useState("");
+  const [newInternalNote, setNewInternalNote] = useState("");
+  
+  // Output files (separate from input files)
+  const [outputFiles, setOutputFiles] = useState<Array<{id: string; filename: string; size: number; uploaded_at: string}>>([]);
+  const [outputConfirmed, setOutputConfirmed] = useState(false);
+  
+  // Determine if credits can be manually edited based on product
+  const [allowCustomCredits, setAllowCustomCredits] = useState(false);
+
+  // Voice recording state
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [activeNoteField, setActiveNoteField] = useState<'customer' | 'internal' | null>(null);
+  
+  // File category filter
+  const [fileCategory, setFileCategory] = useState<'all' | 'customer' | 'creation' | 'detail'>('all');
+
+  // Confirmation dialog state
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingStatus, setPendingStatus] = useState<ProjectStatus | null>(null);
+  const [checklistConfirmed, setChecklistConfirmed] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [lastSaved, setLastSaved] = useState<Date | null>(null);
 
   useEffect(() => {
     if (!id) return;
     loadProject();
   }, [id]);
+
+  // Auto-save effect
+  useEffect(() => {
+    if (!id || !project) return;
+
+    const timeoutId = setTimeout(() => {
+      handleAutoSave();
+    }, 2000); // Speichert 2 Sekunden nach der letzten Änderung
+
+    return () => clearTimeout(timeoutId);
+  }, [status, credits, content, customerNotes, internalNotes, deadline, outputFiles]);
 
   const loadProject = async () => {
     if (!id) return;
@@ -65,10 +107,14 @@ export const ProjectDetailPage = () => {
       setProjectNumber(projectData.project_number || "");
       setStatus(projectData.status);
       setCredits(projectData.credits || "");
-      setCreditFactor(projectData.credit_factor || "1");
       setContent(projectData.content || "");
       setCustomerNotes(projectData.customer_notes || "");
       setInternalNotes(projectData.internal_notes || "");
+      setDeadline(projectData.deadline || "");
+      
+      // Check if product allows custom credits
+      const creditsAllowedProducts = ["HEIZLAST", "HEIZLAST_HYDRAULISCH", "ISFP_ERSTELLUNG", "INDIVIDUELL"];
+      setAllowCustomCredits(creditsAllowedProducts.includes(projectData.product_code));
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
       toast.error("Fehler beim Laden: " + message);
@@ -77,41 +123,314 @@ export const ProjectDetailPage = () => {
     }
   };
 
+  const handleStatusChange = (newStatus: ProjectStatus) => {
+    // Wenn "FERTIGGESTELLT" ausgewählt wird, prüfe Voraussetzungen
+    if (newStatus === "FERTIGGESTELLT") {
+      // Prüfe ob Output-Dateien vorhanden sind
+      const hasOutputFiles = outputFiles && outputFiles.length > 0;
+      
+      if (!hasOutputFiles) {
+        toast.error("Es muss mindestens eine Datei im Output-Bereich hochgeladen werden, bevor das Projekt als 'Fertiggestellt' markiert werden kann.");
+        return;
+      }
+      
+      // Prüfe ob Output-Checkbox aktiviert ist
+      if (!outputConfirmed) {
+        toast.error("Bitte bestätigen Sie im Output-Bereich, dass alle Punkte der Checkliste erfüllt wurden.");
+        return;
+      }
+      
+      // Zeige Bestätigungs-Dialog
+      setPendingStatus(newStatus);
+      setChecklistConfirmed(false);
+      setShowConfirmDialog(true);
+    } else {
+      // Für alle anderen Status direkt setzen
+      setStatus(newStatus);
+    }
+  };
+
+  const handleConfirmStatusChange = () => {
+    if (!checklistConfirmed) {
+      toast.error("Bitte bestätige, dass alle Punkte der Checkliste erfüllt wurden.");
+      return;
+    }
+    
+    if (pendingStatus) {
+      setStatus(pendingStatus);
+      setShowConfirmDialog(false);
+      setPendingStatus(null);
+      setChecklistConfirmed(false);
+      toast.success("Status auf 'Fertiggestellt' gesetzt. Das Projekt erscheint nun in der Qualitätskontrolle. Bitte speichern nicht vergessen!");
+    }
+  };
+
+  const handleCancelStatusChange = () => {
+    setShowConfirmDialog(false);
+    setPendingStatus(null);
+    setChecklistConfirmed(false);
+  };
+
   const handleSave = async () => {
     if (!id) return;
     
     try {
-      await projectsApi.updateProject(id, {
-        project_number: projectNumber,
+      setIsSaving(true);
+      
+      // Wenn Status auf FERTIGGESTELLT gesetzt wird, setze auch qc_status auf PENDING
+      const updateData: ProjectUpdateRequest = {
         status,
-        credits,
-        credit_factor: creditFactor,
+        credits: allowCustomCredits ? credits : undefined,
         content,
         customer_notes: customerNotes,
         internal_notes: internalNotes,
-      });
+        deadline: deadline || undefined,
+      };
+      
+      if (status === "FERTIGGESTELLT") {
+        updateData.qc_status = "PENDING";
+      }
+      
+      await projectsApi.updateProject(id, updateData);
+      setLastSaved(new Date());
       toast.success("Projekt gespeichert");
       loadProject();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
       toast.error("Fehler beim Speichern: " + message);
+    } finally {
+      setIsSaving(false);
     }
   };
 
-  const calculateCredits = () => {
-    if (!customer?.total_revenue || !creditFactor) return;
+  const handleAutoSave = async () => {
+    if (!id) return;
     
-    const revenue = parseFloat(customer.total_revenue.toString());
-    const factor = parseFloat(creditFactor);
-    
-    if (isNaN(revenue) || isNaN(factor)) {
-      toast.error("Ungültige Zahlen für Berechnung");
-      return;
+    try {
+      setIsSaving(true);
+      
+      // Wenn Status auf FERTIGGESTELLT gesetzt wird, setze auch qc_status auf PENDING
+      const updateData: ProjectUpdateRequest = {
+        status,
+        credits: allowCustomCredits ? credits : undefined,
+        content,
+        customer_notes: customerNotes,
+        internal_notes: internalNotes,
+        deadline: deadline || undefined,
+      };
+      
+      if (status === "FERTIGGESTELLT") {
+        updateData.qc_status = "PENDING";
+      }
+      
+      await projectsApi.updateProject(id, updateData);
+      setLastSaved(new Date());
+    } catch (error: unknown) {
+      // Stilles Fehlerhandling bei Auto-Save
+      console.error("Auto-Save Fehler:", error);
+    } finally {
+      setIsSaving(false);
     }
+  };
+
+  const startRecording = async (fieldType: 'customer' | 'internal') => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const audioChunks: Blob[] = [];
+
+      recorder.ondataavailable = (event) => {
+        audioChunks.push(event.data);
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        await transcribeAudio(audioBlob, fieldType);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setActiveNoteField(fieldType);
+      toast.success("Aufnahme gestartet");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Zugriff auf Mikrofon: " + message);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && isRecording) {
+      mediaRecorder.stop();
+      setIsRecording(false);
+      toast.info("Aufnahme beendet, transkribiere...");
+    }
+  };
+
+  const transcribeAudio = async (audioBlob: Blob, fieldType: 'customer' | 'internal') => {
+    try {
+      const formData = new FormData();
+      formData.append('audio', audioBlob, 'recording.webm');
+
+      const response = await fetch('http://127.0.0.1:8080/api/transcribe-note', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error('Transkription fehlgeschlagen');
+      }
+
+      const data = await response.json();
+      
+      if (fieldType === 'customer') {
+        setNewCustomerNote(data.text);
+      } else {
+        setNewInternalNote(data.text);
+      }
+      
+      toast.success("Transkription abgeschlossen");
+      setActiveNoteField(null);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler bei der Transkription: " + message);
+      setActiveNoteField(null);
+    }
+  };
+
+  const handleAddCustomerNote = () => {
+    if (!newCustomerNote.trim()) return;
     
-    const result = (revenue / 30) * factor;
-    setCredits(result.toFixed(2));
-    toast.success(`Credits berechnet: ${result.toFixed(2)}`);
+    const newNote = {
+      id: crypto.randomUUID(),
+      text: newCustomerNote,
+      created_at: new Date().toISOString(),
+    };
+    
+    setCustomerNotesList(prev => [newNote, ...prev]);
+    setNewCustomerNote("");
+    toast.success("Kundennotiz hinzugefügt");
+  };
+
+  const handleAddInternalNote = () => {
+    if (!newInternalNote.trim()) return;
+    
+    const newNote = {
+      id: crypto.randomUUID(),
+      text: newInternalNote,
+      created_at: new Date().toISOString(),
+    };
+    
+    setInternalNotesList(prev => [newNote, ...prev]);
+    setNewInternalNote("");
+    toast.success("Interne Notiz hinzugefügt");
+  };
+
+  const handleDeleteCustomerNote = (id: string) => {
+    setCustomerNotesList(prev => prev.filter(note => note.id !== id));
+    toast.success("Notiz gelöscht");
+  };
+
+  const handleDeleteInternalNote = (id: string) => {
+    setInternalNotesList(prev => prev.filter(note => note.id !== id));
+    toast.success("Notiz gelöscht");
+  };
+
+  const handleApprove = async () => {
+    if (!id) return;
+    
+    try {
+      await qcApi.approveProject(id);
+      toast.success("Projekt freigegeben und ins Archiv verschoben!");
+      loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler: " + message);
+    }
+  };
+
+  const handleReject = async () => {
+    if (!id) return;
+    
+    try {
+      await qcApi.rejectProject(id);
+      toast.info("Projekt zurück in Revision geschickt");
+      loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler: " + message);
+    }
+  };
+
+  const formatNoteDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+
+  const handleOutputFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      const filesArray = Array.from(e.target.files);
+      const newFiles = filesArray.map(file => ({
+        id: crypto.randomUUID(),
+        filename: file.name,
+        size: file.size,
+        uploaded_at: new Date().toISOString(),
+      }));
+      setOutputFiles(prev => [...prev, ...newFiles]);
+      toast.success(`${filesArray.length} Datei(en) hochgeladen`);
+    }
+  };
+
+  const handleDeleteOutputFile = (id: string) => {
+    setOutputFiles(prev => prev.filter(file => file.id !== id));
+    toast.success("Datei gelöscht");
+  };
+
+  const calculateRemainingDays = () => {
+    if (!deadline) return null;
+    
+    const deadlineDate = new Date(deadline);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    deadlineDate.setHours(0, 0, 0, 0);
+    
+    const diffTime = deadlineDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    return diffDays;
+  };
+
+  const getRemainingDaysColor = () => {
+    const days = calculateRemainingDays();
+    if (days === null) return "text-muted-foreground";
+    if (days < 0) return "text-red-600";
+    if (days <= 3) return "text-red-600";
+    if (days <= 5) return "text-yellow-600";
+    return "text-green-600";
+  };
+
+  const getRemainingDaysText = () => {
+    const days = calculateRemainingDays();
+    if (days === null) return "Keine Frist gesetzt";
+    if (days < 0) return `${Math.abs(days)} Tag${Math.abs(days) === 1 ? '' : 'e'} überfällig`;
+    if (days === 0) return "Heute fällig";
+    if (days === 1) return "Noch 1 Tag";
+    return `Noch ${days} Tage`;
+  };
+
+  const getFilteredFiles = () => {
+    if (!project.files) return [];
+    
+    if (fileCategory === 'all') return project.files;
+    
+    return project.files.filter(file => {
+      // files haben ein 'source' Feld
+      // 'customer' = vom Kunden hochgeladen
+      // 'creation' = bei Projekterstellung hochgeladen
+      // 'detail' = in Großansicht hochgeladen
+      return file.source === fileCategory;
+    });
   };
 
   if (loading) {
@@ -139,18 +458,65 @@ export const ProjectDetailPage = () => {
             <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
+            
+            {/* QC Buttons - nur wenn Status FERTIGGESTELLT und qc_status PENDING */}
+            {project.status === "FERTIGGESTELLT" && (project.qc_status === "PENDING" || project.qcStatus === "PENDING") && (
+              <>
+                <Button
+                  className="bg-success hover:bg-success/90 text-success-foreground"
+                  onClick={handleApprove}
+                  size="sm"
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  Freigeben
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleReject}
+                  size="sm"
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Revision
+                </Button>
+              </>
+            )}
+            
             <div>
               <h1 className="text-3xl font-bold">{project.product_name}</h1>
               <p className="text-lg text-muted-foreground">{projectNumber || "Keine Projektnummer"}</p>
+              {deadline && (
+                <div className="mt-2 flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Frist:</span>
+                  <span className="text-sm font-medium">
+                    {new Date(deadline).toLocaleDateString("de-DE", { 
+                      day: "2-digit", 
+                      month: "2-digit", 
+                      year: "numeric" 
+                    })}
+                  </span>
+                  <span className={`text-sm font-bold ${getRemainingDaysColor()}`}>
+                    ({getRemainingDaysText()})
+                  </span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
             <Badge className={`${STATUS_COLORS[status]} text-white`}>
               {STATUS_LABELS[status]}
             </Badge>
-            <Button onClick={handleSave}>
+            
+            {isSaving && (
+              <span className="text-xs text-muted-foreground">Speichert...</span>
+            )}
+            {!isSaving && lastSaved && (
+              <span className="text-xs text-muted-foreground">
+                Zuletzt gespeichert: {lastSaved.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            )}
+            <Button onClick={handleSave} disabled={isSaving}>
               <Save className="h-4 w-4 mr-2" />
-              Speichern
+              {isSaving ? 'Speichert...' : 'Speichern'}
             </Button>
           </div>
         </div>
@@ -169,9 +535,12 @@ export const ProjectDetailPage = () => {
                 <Label>Projektnummer</Label>
                 <Input
                   value={projectNumber}
-                  onChange={(e) => setProjectNumber(e.target.value)}
-                  placeholder="z.B. PRJ-2025-001"
+                  disabled
+                  className="bg-muted"
                 />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Automatisch generiert
+                </p>
               </div>
               
               <div>
@@ -193,7 +562,7 @@ export const ProjectDetailPage = () => {
               
               <div>
                 <Label>Status</Label>
-                <Select value={status} onValueChange={(v) => setStatus(v as ProjectStatus)}>
+                <Select value={status} onValueChange={(v) => handleStatusChange(v as ProjectStatus)}>
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -209,32 +578,42 @@ export const ProjectDetailPage = () => {
               
               <div>
                 <Label>Credits</Label>
-                <div className="flex gap-2">
+                {allowCustomCredits ? (
                   <Input
                     value={credits}
                     onChange={(e) => setCredits(e.target.value)}
-                    placeholder="Credits"
+                    type="number"
+                    step="0.01"
+                    placeholder="Credits eingeben..."
                   />
-                </div>
+                ) : (
+                  <Input
+                    value={credits}
+                    disabled
+                    className="bg-muted"
+                    placeholder="Wird automatisch berechnet"
+                  />
+                )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  {allowCustomCredits 
+                    ? "Credits können manuell eingegeben werden" 
+                    : "Automatisch berechnet: Umsatz / 30"}
+                </p>
               </div>
               
               <div>
-                <Label>Credit-Faktor</Label>
-                <div className="flex gap-2">
-                  <Input
-                    type="number"
-                    step="0.1"
-                    value={creditFactor}
-                    onChange={(e) => setCreditFactor(e.target.value)}
-                    placeholder="1.0"
-                  />
-                  <Button onClick={calculateCredits} variant="outline">
-                    Berechnen
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Formel: (Umsatz / 30) × Faktor
-                </p>
+                <Label>Frist / Deadline</Label>
+                <Input
+                  type="date"
+                  value={deadline}
+                  onChange={(e) => setDeadline(e.target.value)}
+                  placeholder="Frist auswählen..."
+                />
+                {deadline && (
+                  <p className={`text-xs font-medium mt-1 ${getRemainingDaysColor()}`}>
+                    {getRemainingDaysText()}
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -250,71 +629,233 @@ export const ProjectDetailPage = () => {
             </TabsList>
 
             <TabsContent value="content" className="mt-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Projektinhalt</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label>Freitext</Label>
-                    <Textarea
-                      value={content}
-                      onChange={(e) => setContent(e.target.value)}
-                      rows={10}
-                      placeholder="Projektbeschreibung, Details, Hinweise..."
-                    />
-                  </div>
-                  
-                  <div>
-                    <Label>Dateien</Label>
-                    <div className="border rounded-lg p-4">
-                      <Button variant="outline" className="w-full">
-                        <Upload className="h-4 w-4 mr-2" />
-                        Dateien hochladen
-                      </Button>
-                      
-                      {project.files && project.files.length > 0 ? (
-                        <div className="mt-4 space-y-2">
-                          {project.files.map((file) => (
-                            <div key={file.id} className="flex items-center justify-between p-2 border rounded">
-                              <div className="flex items-center gap-2">
-                                <FileText className="h-4 w-4" />
-                                <span className="text-sm">{file.filename}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  ({(file.size / 1024).toFixed(1)} KB)
-                                </span>
-                              </div>
-                              <Button variant="ghost" size="sm">
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-muted-foreground text-center mt-4">
-                          Noch keine Dateien hochgeladen
-                        </p>
-                      )}
+              <div className="grid grid-cols-2 gap-4">
+                {/* Input Section */}
+                <Card className="border-blue-200 bg-blue-50/30">
+                  <CardHeader className="bg-blue-100/50">
+                    <CardTitle className="text-blue-900">Inhalt & Dateien (Input)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Freitext</Label>
+                      <Textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        rows={10}
+                        placeholder="Projektbeschreibung, Details, Hinweise..."
+                      />
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    
+                    <div>
+                      <Label>Dateien</Label>
+                      <div className="border rounded-lg p-4">
+                        <Button variant="outline" className="w-full">
+                          <Upload className="h-4 w-4 mr-2" />
+                          Dateien hochladen (Input)
+                        </Button>
+                        
+                        {getFilteredFiles().length > 0 ? (
+                          <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
+                            {getFilteredFiles().map((file) => (
+                              <div key={file.id} className="flex items-center justify-between p-2 border rounded">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="h-4 w-4" />
+                                  <div className="flex flex-col">
+                                    <span className="text-sm">{file.filename}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {(file.size / 1024).toFixed(1)} KB
+                                    </span>
+                                  </div>
+                                </div>
+                                <Button variant="ghost" size="sm">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center mt-4">
+                            Noch keine Dateien hochgeladen
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Output Section */}
+                <Card className="border-green-200 bg-green-50/30">
+                  <CardHeader className="bg-green-100/50">
+                    <CardTitle className="text-green-900">Inhalt & Dateien (Output)</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <Label>Freitext (Output)</Label>
+                      <Textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        rows={10}
+                        placeholder="Ausgabe, Ergebnisse, Berichte..."
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label>Dateien (Output)</Label>
+                      <div className="border rounded-lg p-4">
+                        <label htmlFor="output-file-upload" className="cursor-pointer">
+                          <Button variant="outline" className="w-full" type="button" onClick={() => document.getElementById('output-file-upload')?.click()}>
+                            <Upload className="h-4 w-4 mr-2" />
+                            Dateien hochladen (Output)
+                          </Button>
+                        </label>
+                        <input
+                          id="output-file-upload"
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={handleOutputFileUpload}
+                        />
+                        
+                        {outputFiles.length > 0 ? (
+                          <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
+                            {outputFiles.map((file) => (
+                              <div key={file.id} className="flex items-center justify-between p-2 border rounded bg-green-50">
+                                <div className="flex items-center gap-2">
+                                  <FileText className="h-4 w-4 text-green-600" />
+                                  <div className="flex flex-col">
+                                    <span className="text-sm">{file.filename}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {(file.size / 1024).toFixed(1)} KB
+                                    </span>
+                                  </div>
+                                </div>
+                                <Button variant="ghost" size="sm" onClick={() => handleDeleteOutputFile(file.id)}>
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-sm text-muted-foreground text-center mt-4">
+                            Noch keine Output-Dateien hochgeladen
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="border rounded-lg p-4 bg-white">
+                      <div className="flex items-start gap-3">
+                        <Checkbox 
+                          id="output-confirm"
+                          checked={outputConfirmed}
+                          onCheckedChange={(checked) => setOutputConfirmed(checked === true)}
+                          className="mt-1"
+                        />
+                        <label 
+                          htmlFor="output-confirm" 
+                          className="text-sm font-medium leading-relaxed cursor-pointer"
+                        >
+                          Ich bestätige, dass ich mit unserer Checkliste das Projekt gegengecheckt habe und jeder einzelne Punkt erfüllt wurde.
+                        </label>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </TabsContent>
 
             <TabsContent value="customer" className="mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Kommunikation mit Kunde</CardTitle>
+                  <CardTitle>Kundennotizen</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div>
-                    <Label>Notizen (für Kunden sichtbar)</Label>
-                    <Textarea
-                      value={customerNotes}
-                      onChange={(e) => setCustomerNotes(e.target.value)}
-                      rows={15}
-                      placeholder="Diese Notizen sind für den Kunden sichtbar..."
-                    />
+                <CardContent className="space-y-4">
+                  <div className="bg-muted/50 p-3 rounded-lg text-sm text-muted-foreground">
+                    💡 <strong>Tipp:</strong> Sie können beim Sprechen Anweisungen geben wie:
+                    <ul className="mt-2 ml-4 list-disc">
+                      <li>"Verfasse in formeller Sprache: [Ihre Notiz]"</li>
+                      <li>"Fasse zusammen: [Ihre Notiz]"</li>
+                      <li>Oder einfach nur die Notiz sprechen</li>
+                    </ul>
+                  </div>
+                  
+                  {isRecording && activeNoteField === 'customer' && (
+                    <div className="flex items-center gap-2 text-xs text-red-600">
+                      <div className="flex items-center gap-0.5">
+                        {[4, 8, 12, 10, 6, 14, 8, 5].map((height, i) => (
+                          <div
+                            key={i}
+                            className="w-0.5 bg-red-500 rounded-full animate-pulse"
+                            style={{
+                              height: `${height}px`,
+                              animationDelay: `${i * 0.1}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span>Aufnahme läuft...</span>
+                    </div>
+                  )}
+                  
+                  <Textarea
+                    placeholder="Neue Notiz..."
+                    value={newCustomerNote}
+                    onChange={(e) => setNewCustomerNote(e.target.value)}
+                    rows={3}
+                  />
+                  
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => isRecording && activeNoteField === 'customer' ? stopRecording() : startRecording('customer')}
+                      variant={isRecording && activeNoteField === 'customer' ? "destructive" : "outline"}
+                      size="sm"
+                      className="flex-shrink-0"
+                    >
+                      {isRecording && activeNoteField === 'customer' ? (
+                        <>
+                          <MicOff className="h-4 w-4 mr-2" />
+                          Aufnahme stoppen
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="h-4 w-4 mr-2" />
+                          Sprechen
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      onClick={handleAddCustomerNote} 
+                      disabled={!newCustomerNote.trim()} 
+                      size="sm" 
+                      className="flex-1"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Notiz hinzufügen
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {customerNotesList.map((note) => (
+                      <div key={note.id} className="p-3 border rounded-lg bg-muted/20">
+                        <div className="flex items-start justify-between">
+                          <p className="text-sm flex-1">{note.text}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 ml-2"
+                            onClick={() => handleDeleteCustomerNote(note.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {formatNoteDate(note.created_at)}
+                        </p>
+                      </div>
+                    ))}
+                    {customerNotesList.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-8">Keine Notizen vorhanden</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -323,17 +864,95 @@ export const ProjectDetailPage = () => {
             <TabsContent value="internal" className="mt-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Interne Kommunikation</CardTitle>
+                  <CardTitle>Interne Notizen</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div>
-                    <Label>Interne Notizen (nur für Team)</Label>
-                    <Textarea
-                      value={internalNotes}
-                      onChange={(e) => setInternalNotes(e.target.value)}
-                      rows={15}
-                      placeholder="Diese Notizen sind nur für das Team sichtbar..."
-                    />
+                <CardContent className="space-y-4">
+                  <div className="bg-muted/50 p-3 rounded-lg text-sm text-muted-foreground">
+                    💡 <strong>Tipp:</strong> Sie können beim Sprechen Anweisungen geben wie:
+                    <ul className="mt-2 ml-4 list-disc">
+                      <li>"Verfasse in formeller Sprache: [Ihre Notiz]"</li>
+                      <li>"Fasse zusammen: [Ihre Notiz]"</li>
+                      <li>Oder einfach nur die Notiz sprechen</li>
+                    </ul>
+                  </div>
+                  
+                  {isRecording && activeNoteField === 'internal' && (
+                    <div className="flex items-center gap-2 text-xs text-red-600">
+                      <div className="flex items-center gap-0.5">
+                        {[4, 8, 12, 10, 6, 14, 8, 5].map((height, i) => (
+                          <div
+                            key={i}
+                            className="w-0.5 bg-red-500 rounded-full animate-pulse"
+                            style={{
+                              height: `${height}px`,
+                              animationDelay: `${i * 0.1}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                      <span>Aufnahme läuft...</span>
+                    </div>
+                  )}
+                  
+                  <Textarea
+                    placeholder="Neue Notiz..."
+                    value={newInternalNote}
+                    onChange={(e) => setNewInternalNote(e.target.value)}
+                    rows={3}
+                  />
+                  
+                  <div className="flex gap-2">
+                    <Button 
+                      onClick={() => isRecording && activeNoteField === 'internal' ? stopRecording() : startRecording('internal')}
+                      variant={isRecording && activeNoteField === 'internal' ? "destructive" : "outline"}
+                      size="sm"
+                      className="flex-shrink-0"
+                    >
+                      {isRecording && activeNoteField === 'internal' ? (
+                        <>
+                          <MicOff className="h-4 w-4 mr-2" />
+                          Aufnahme stoppen
+                        </>
+                      ) : (
+                        <>
+                          <Mic className="h-4 w-4 mr-2" />
+                          Sprechen
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      onClick={handleAddInternalNote} 
+                      disabled={!newInternalNote.trim()} 
+                      size="sm" 
+                      className="flex-1"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Notiz hinzufügen
+                    </Button>
+                  </div>
+
+                  <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                    {internalNotesList.map((note) => (
+                      <div key={note.id} className="p-3 border rounded-lg bg-muted/20">
+                        <div className="flex items-start justify-between">
+                          <p className="text-sm flex-1">{note.text}</p>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 ml-2"
+                            onClick={() => handleDeleteInternalNote(note.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {formatNoteDate(note.created_at)}
+                        </p>
+                      </div>
+                    ))}
+                    {internalNotesList.length === 0 && (
+                      <p className="text-sm text-muted-foreground text-center py-8">Keine Notizen vorhanden</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -341,6 +960,65 @@ export const ProjectDetailPage = () => {
           </Tabs>
         </div>
       </div>
+
+      {/* Confirmation Dialog for FERTIGGESTELLT Status */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-yellow-500" />
+              Projekt als 'Fertiggestellt' markieren
+            </DialogTitle>
+            <DialogDescription>
+              Bitte bestätige, dass alle Anforderungen erfüllt wurden.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="bg-muted p-4 rounded-lg space-y-3">
+              <p className="text-sm font-medium">Voraussetzungen:</p>
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-green-500">✓</span>
+                <span>Mindestens eine Output-Datei wurde im grünen Bereich hochgeladen ({outputFiles.length} {outputFiles.length === 1 ? 'Datei' : 'Dateien'})</span>
+              </div>
+              <div className="flex items-start gap-2 text-sm">
+                <span className="text-green-500">✓</span>
+                <span>Checkliste im Output-Bereich wurde bestätigt</span>
+              </div>
+            </div>
+
+            <div className="border rounded-lg p-4">
+              <div className="flex items-start gap-3">
+                <Checkbox 
+                  id="checklist-confirm"
+                  checked={checklistConfirmed}
+                  onCheckedChange={(checked) => setChecklistConfirmed(checked === true)}
+                  className="mt-1"
+                />
+                <label 
+                  htmlFor="checklist-confirm" 
+                  className="text-sm font-medium leading-relaxed cursor-pointer"
+                >
+                  Ich bestätige, dass ich mit unserer Checkliste das Projekt gegengeprüft habe und jeder einzelne Punkt erfüllt wurde.
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={handleCancelStatusChange}>
+              Abbrechen
+            </Button>
+            <Button 
+              onClick={handleConfirmStatusChange}
+              disabled={!checklistConfirmed}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Bestätigen & Fertigstellen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
