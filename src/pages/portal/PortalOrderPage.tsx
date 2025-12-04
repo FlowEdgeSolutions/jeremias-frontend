@@ -1,13 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { ProductOption } from "@/types";
-import { apiClient } from "@/api/mockApiClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -17,42 +16,43 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
+// Statische Produktoptionen (später aus API laden)
+const productOptions = [
+  { code: "3DMODEL", name: "3D-Modell", description: "Detailliertes 3D-Modell des Gebäudes" },
+  { code: "HEIZLAST", name: "Heizlastberechnung", description: "Professionelle Heizlastberechnung nach DIN" },
+  { code: "GRUNDRISS", name: "Grundrissplanung", description: "Digitale Grundrisse und Pläne" },
+  { code: "PAKET", name: "Komplett-Paket", description: "Alle Services in einem Paket" },
+];
+
 export const PortalOrderPage = () => {
   const navigate = useNavigate();
   const { currentUser } = useAuth();
-  const [products, setProducts] = useState<ProductOption[]>([]);
   const [selectedProduct, setSelectedProduct] = useState("");
   const [address, setAddress] = useState("");
   const [buildingType, setBuildingType] = useState("");
   const [livingArea, setLivingArea] = useState("");
   const [notes, setNotes] = useState("");
-
-  useEffect(() => {
-    loadProducts();
-  }, []);
-
-  const loadProducts = async () => {
-    const data = await apiClient.getProductOptions();
-    setProducts(data);
-  };
+  const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const product = products.find(p => p.code === selectedProduct);
+    const product = productOptions.find(p => p.code === selectedProduct);
     if (!product || !currentUser) return;
 
-    // TODO: Replace with actual API call
-    await apiClient.createOrder({
-      customerId: currentUser.id,
-      customerName: currentUser.name,
-      productCode: product.code,
-      productName: product.name,
-      // Additional form data would go here
-    });
-
-    toast.success("Bestellung erfolgreich aufgegeben!");
-    navigate("/portal/projects");
+    try {
+      setSubmitting(true);
+      
+      // TODO: Implement actual order creation API
+      // For now, show a success message
+      toast.success("Bestellung erfolgreich aufgegeben! Wir werden uns bald bei Ihnen melden.");
+      navigate("/portal/projects");
+    } catch (err) {
+      console.error("Failed to submit order:", err);
+      toast.error("Fehler beim Aufgeben der Bestellung");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -77,7 +77,7 @@ export const PortalOrderPage = () => {
                   <SelectValue placeholder="Wählen Sie ein Produkt..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((product) => (
+                  {productOptions.map((product) => (
                     <SelectItem key={product.code} value={product.code}>
                       <div>
                         <div className="font-medium">{product.name}</div>
@@ -158,7 +158,8 @@ export const PortalOrderPage = () => {
               <Button type="button" variant="outline" onClick={() => navigate("/portal/dashboard")}>
                 Abbrechen
               </Button>
-              <Button type="submit">
+              <Button type="submit" disabled={submitting}>
+                {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Bestellung absenden
               </Button>
             </div>

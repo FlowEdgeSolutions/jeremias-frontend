@@ -247,14 +247,6 @@ export interface CustomerUpdateRequest {
   stage?: PipelineStage;
 }
 
-export interface UnlockPortalAccessResponse {
-  message: string;
-  user_id: string;
-  email: string;
-  temporary_password: string;
-  note: string;
-}
-
 export const customersApi = {
   async getCustomers(filters?: CustomerFilters): Promise<Customer[]> {
     const params = new URLSearchParams();
@@ -292,13 +284,6 @@ export const customersApi = {
     return fetchApi<Customer>(`/customers/${id}/change-stage`, {
       method: "POST",
       body: JSON.stringify({ new_stage: newStage }),
-    });
-  },
-
-  async unlockPortalAccess(id: string, initialPassword?: string): Promise<UnlockPortalAccessResponse> {
-    return fetchApi<UnlockPortalAccessResponse>(`/customers/${id}/unlock-portal-access`, {
-      method: "POST",
-      body: JSON.stringify({ initial_password: initialPassword }),
     });
   },
 
@@ -358,6 +343,7 @@ export interface ProjectCreateRequest {
   internal_notes?: string;
   payload?: Record<string, unknown>;
   assigned_user_id: string;  // Required: Employee to assign
+  send_order_confirmation?: boolean;  // Whether to send order confirmation email (default: true)
 }
 
 export interface ProjectUpdateRequest {
@@ -628,6 +614,82 @@ export const paymentsApi = {
   },
 };
 
+// ============================================================================
+// CUSTOMER PORTAL API
+// ============================================================================
+
+export interface CustomerProfile {
+  id: string;
+  name: string;
+  email: string;
+  company_name?: string;
+  phone?: string;
+}
+
+export interface CustomerStats {
+  projects_count: number;
+  invoices_count: number;
+  unpaid_invoices_count: number;
+  total_amount: number;
+}
+
+export interface CustomerProject {
+  id: string;
+  product_name: string;
+  product_code: string;
+  status: string;
+  qc_status: string;
+  created_at: string;
+}
+
+export interface CustomerInvoice {
+  id: string;
+  amount: number;
+  currency: string;
+  status: string;
+  due_date: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+export interface CustomerProfileUpdate {
+  name?: string;
+  email?: string;
+  company_name?: string;
+  phone?: string;
+}
+
+export const customerPortalApi = {
+  async getProfile(): Promise<CustomerProfile> {
+    return fetchApi<CustomerProfile>("/customer/me");
+  },
+
+  async getStats(): Promise<CustomerStats> {
+    return fetchApi<CustomerStats>("/customer/stats");
+  },
+
+  async getProjects(): Promise<CustomerProject[]> {
+    return fetchApi<CustomerProject[]>("/customer/projects");
+  },
+
+  async getInvoices(): Promise<CustomerInvoice[]> {
+    return fetchApi<CustomerInvoice[]>("/customer/invoices");
+  },
+
+  async updateProfile(data: CustomerProfileUpdate): Promise<CustomerProfile> {
+    return fetchApi<CustomerProfile>("/customer/profile", {
+      method: "PUT",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async createPaymentSession(invoiceId: string): Promise<{ checkout_url: string; invoice_id: string }> {
+    return fetchApi<{ checkout_url: string; invoice_id: string }>(`/customer/invoices/${invoiceId}/pay`, {
+      method: "POST",
+    });
+  },
+};
+
 export const apiClient = {
   auth: authApi,
   leads: leadsApi,
@@ -638,6 +700,7 @@ export const apiClient = {
   qc: qcApi,
   users: usersApi,
   payments: paymentsApi,
+  customerPortal: customerPortalApi,
 };
 
 export { ApiError, getToken, setToken, removeToken };

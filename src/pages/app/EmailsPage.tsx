@@ -1,15 +1,39 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Inbox, RefreshCw, Paperclip, ExternalLink, Search, UserPlus, X, ChevronLeft, ChevronRight, Menu, Reply, Plus, Edit2, Star } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { toast } from "sonner";
+
+import {
+  PencilSquareIcon,
+  InboxIcon,
+  StarIcon,
+  PaperAirplaneIcon,
+  ArchiveBoxIcon,
+  TrashIcon,
+  MagnifyingGlassIcon,
+  ArrowUturnLeftIcon,
+  PaperClipIcon,
+  UserPlusIcon,
+  EnvelopeIcon,
+  PlusIcon,
+  CheckIcon,
+  XMarkIcon,
+  Cog6ToothIcon,
+  ClockIcon,
+  DocumentTextIcon,
+  ExclamationCircleIcon,
+  ChevronDownIcon,
+  EllipsisHorizontalIcon,
+  ArrowUturnRightIcon,
+  TagIcon,
+} from "@heroicons/react/24/outline";
+import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 
 interface Email {
   id: string;
@@ -46,13 +70,14 @@ interface EmailDetail {
     size: number;
   }>;
   labels: string[];
+  account_email?: string;
 }
 
-interface Signature {
+interface EmailAccount {
   id: string;
-  name: string;
-  content: string;
-  isDefault?: boolean;
+  email: string;
+  is_primary: boolean;
+  type?: "gmail" | "microsoft"; // Account type
 }
 
 export const EmailsPage = () => {
@@ -60,19 +85,26 @@ export const EmailsPage = () => {
   const [filteredEmails, setFilteredEmails] = useState<Email[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailDetail | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [oauthUrl, setOauthUrl] = useState("");
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showComposeDialog, setShowComposeDialog] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [showEmailList, setShowEmailList] = useState(true);
-  const [showEmailDetail, setShowEmailDetail] = useState(true);
-  const [showReplyBox, setShowReplyBox] = useState(false);
-  const [showSignatureDialog, setShowSignatureDialog] = useState(false);
-  const [signatures, setSignatures] = useState<Signature[]>([]);
-  const [selectedSignatureId, setSelectedSignatureId] = useState<string>("");
-  const [newSignature, setNewSignature] = useState({ name: "", content: "" });
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showAccountsDialog, setShowAccountsDialog] = useState(false);
+  const [showReplyDialog, setShowReplyDialog] = useState(false);
+  const [showForwardDialog, setShowForwardDialog] = useState(false);
+  const [replyForm, setReplyForm] = useState({ body: "" });
+  const [forwardForm, setForwardForm] = useState({ to: "", body: "", cc: "", bcc: "" });
+  const [gmailAccounts, setGmailAccounts] = useState<EmailAccount[]>([]);
+  const [microsoftAccounts, setMicrosoftAccounts] = useState<EmailAccount[]>([]);
+  const [allAccounts, setAllAccounts] = useState<EmailAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const [selectedAccountType, setSelectedAccountType] = useState<"gmail" | "microsoft" | null>(null);
+  const [composeForm, setComposeForm] = useState({
+    to: "",
+    subject: "",
+    body: "",
+    accountId: "",
+  });
   const [createForm, setCreateForm] = useState({
     type: "lead" as "lead" | "customer",
     stage: "LEAD_LIST" as string,
@@ -82,77 +114,13 @@ export const EmailsPage = () => {
     lastName: "",
     companyName: "",
   });
-  const [composeForm, setComposeForm] = useState({
-    to: "",
-    subject: "",
-    body: "",
-  });
-
-  const loadSignatures = () => {
-    const saved = localStorage.getItem("email_signatures");
-    if (saved) {
-      setSignatures(JSON.parse(saved));
-    }
-  };
-
-  const saveSignature = () => {
-    if (!newSignature.name.trim() || !newSignature.content.trim()) {
-      toast.error("Bitte Name und Signatur ausfüllen");
-      return;
-    }
-
-    const signature: Signature = {
-      id: Date.now().toString(),
-      name: newSignature.name,
-      content: newSignature.content,
-      isDefault: signatures.length === 0, // First signature is default
-    };
-
-    const updated = [...signatures, signature];
-    setSignatures(updated);
-    localStorage.setItem("email_signatures", JSON.stringify(updated));
-    
-    setNewSignature({ name: "", content: "" });
-    setShowSignatureDialog(false);
-    toast.success("Signatur gespeichert!");
-  };
-
-  const deleteSignature = (id: string) => {
-    const updated = signatures.filter(s => s.id !== id);
-    setSignatures(updated);
-    localStorage.setItem("email_signatures", JSON.stringify(updated));
-    toast.success("Signatur gelöscht");
-  };
-
-  const setDefaultSignature = (id: string) => {
-    const updated = signatures.map(s => ({
-      ...s,
-      isDefault: s.id === id,
-    }));
-    setSignatures(updated);
-    localStorage.setItem("email_signatures", JSON.stringify(updated));
-    toast.success("Standard-Signatur gesetzt");
-  };
-
-  const insertSignature = () => {
-    if (!selectedSignatureId) return;
-    
-    const signature = signatures.find(s => s.id === selectedSignatureId);
-    if (signature) {
-      setComposeForm({
-        ...composeForm,
-        body: composeForm.body + "\n\n" + signature.content,
-      });
-    }
-  };
 
   useEffect(() => {
     checkConnection();
-    loadSignatures();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // Filter emails based on search query
     if (searchQuery.trim() === "") {
       setFilteredEmails(emails);
     } else {
@@ -171,38 +139,70 @@ export const EmailsPage = () => {
 
   const checkConnection = async () => {
     try {
-      const response = await fetch("http://127.0.0.1:8080/api/gmail/connection-status", {
+      // Check Gmail connection
+      const gmailResponse = await fetch("http://127.0.0.1:8080/api/gmail/connection-status", {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
         },
       });
-      const data = await response.json();
-      setIsConnected(data.is_connected);
-      setOauthUrl(data.oauth_url);
+      const gmailData = await gmailResponse.json();
+      const gmailAccs = (gmailData.accounts || []).map((acc: EmailAccount) => ({ ...acc, type: "gmail" as const }));
+      setGmailAccounts(gmailAccs);
       
-      if (data.is_connected) {
+      // Check Microsoft Mail connection
+      const microsoftResponse = await fetch("http://127.0.0.1:8080/api/microsoft-mail/connection-status", {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+        },
+      });
+      const microsoftData = await microsoftResponse.json();
+      const microsoftAccs = (microsoftData.accounts || []).map((acc: EmailAccount) => ({ ...acc, type: "microsoft" as const }));
+      setMicrosoftAccounts(microsoftAccs);
+      
+      // Combine all accounts
+      const combined = [...gmailAccs, ...microsoftAccs];
+      setAllAccounts(combined);
+      setIsConnected(gmailData.is_connected || microsoftData.is_connected);
+      
+      // Set default account
+      const primaryAccount = combined.find((acc: EmailAccount) => acc.is_primary);
+      if (primaryAccount) {
+        setSelectedAccountId(primaryAccount.id);
+        setSelectedAccountType(primaryAccount.type || "gmail");
+      } else if (combined.length > 0) {
+        setSelectedAccountId(combined[0].id);
+        setSelectedAccountType(combined[0].type || "gmail");
+      }
+      
+      if (gmailData.is_connected || microsoftData.is_connected) {
         loadEmails();
       }
     } catch (error) {
-      // Gmail-Server nicht erreichbar - still fail
       setIsConnected(false);
-      console.log("Gmail-Server nicht verfügbar auf Port 8080");
     } finally {
       setLoading(false);
     }
   };
 
-  const loadEmails = async () => {
+  const loadEmails = async (accountId?: string, accountType?: "gmail" | "microsoft") => {
     try {
       setLoading(true);
-      const response = await fetch("http://127.0.0.1:8080/api/gmail/emails", {
+      const type = accountType || selectedAccountType || "gmail";
+      const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
+      
+      let url = `${baseUrl}/emails`;
+      if (type === "gmail" && accountId) {
+        url += `?account_id=${accountId}`;
+      }
+      
+      const response = await fetch(`http://127.0.0.1:8080${url}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
         },
       });
       const data = await response.json();
-      setEmails(data.emails);
-      setFilteredEmails(data.emails);
+      setEmails(data.emails || []);
+      setFilteredEmails(data.emails || []);
     } catch (error) {
       toast.error("Fehler beim Laden der E-Mails");
     } finally {
@@ -212,7 +212,15 @@ export const EmailsPage = () => {
 
   const loadEmailDetails = async (emailId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:8080/api/gmail/emails/${emailId}`, {
+      const type = selectedAccountType || "gmail";
+      const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
+      
+      let url = `${baseUrl}/emails/${emailId}`;
+      if (type === "gmail" && selectedAccountId) {
+        url += `?account_id=${selectedAccountId}`;
+      }
+      
+      const response = await fetch(`http://127.0.0.1:8080${url}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
         },
@@ -220,15 +228,13 @@ export const EmailsPage = () => {
       const data = await response.json();
       setSelectedEmail(data);
       
-      // Mark as read
       if (!data.is_read) {
-        await fetch(`http://127.0.0.1:8080/api/gmail/emails/${emailId}/mark-read`, {
+        await fetch(`http://127.0.0.1:8080${baseUrl}/emails/${emailId}/mark-read`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
           },
         });
-        // Update local state
         setEmails(emails.map(e => e.id === emailId ? { ...e, is_read: true } : e));
       }
     } catch (error) {
@@ -236,126 +242,58 @@ export const EmailsPage = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 60) return `vor ${diffMins}m`;
-    if (diffHours < 24) return `vor ${diffHours}h`;
-    if (diffDays < 7) return `vor ${diffDays}d`;
-    return date.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / 1048576).toFixed(1) + " MB";
-  };
-
   const connectGmail = async () => {
     try {
-      // Get OAuth URL from backend
       const response = await fetch("http://127.0.0.1:8080/api/gmail/auth-url", {
         headers: {
           Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
         },
       });
-      
-      if (!response.ok) {
-        throw new Error("Fehler beim Abrufen der Auth-URL");
-      }
-      
       const data = await response.json();
-      
-      // Redirect to Google OAuth
       window.location.href = data.auth_url;
     } catch (error) {
-      toast.error("Gmail-Server nicht erreichbar. Bitte starte den Server auf Port 8080.");
-      console.error(error);
+      toast.error("Gmail-Verbindung fehlgeschlagen");
     }
   };
 
-  const handleCreateLeadOrCustomer = async () => {
+  const setAccountAsPrimary = async (accountId: string) => {
     try {
-      if (!createForm.email || !createForm.firstName || !createForm.lastName) {
-        toast.error("Bitte fülle alle Pflichtfelder aus");
-        return;
-      }
-
-      const payload = {
-        email: createForm.email,
-        first_name: createForm.firstName,
-        last_name: createForm.lastName,
-        company_name: createForm.companyName || "",
-        segment: createForm.segment,
-        stage: createForm.stage,
-      };
-
-      console.log("Creating lead with payload:", payload);
-
-      const response = await fetch("http://127.0.0.1:8080/api/leads", {
+      await fetch(`http://127.0.0.1:8080/api/gmail/accounts/${accountId}/set-primary`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
-        },
-        body: JSON.stringify(payload),
+        headers: { Authorization: `Bearer ${localStorage.getItem("jeremia_token")}` },
       });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Error creating lead:", errorData);
-        throw new Error(errorData.detail || "Fehler beim Anlegen");
-      }
-
-      const result = await response.json();
-      console.log("Lead created successfully:", result);
-
-      toast.success(`${createForm.type === "lead" ? "Lead" : "Kunde"} erfolgreich angelegt!`);
-      setShowCreateDialog(false);
-      setCreateForm({
-        type: "lead",
-        stage: "LEAD_LIST",
-        segment: "ENDKUNDE",
-        email: "",
-        firstName: "",
-        lastName: "",
-        companyName: "",
-      });
+      setGmailAccounts(accounts => accounts.map(acc => ({ ...acc, is_primary: acc.id === accountId })));
+      toast.success("Primäres Konto geändert");
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Fehler beim Anlegen";
-      toast.error(errorMessage);
-      console.error("Create lead error:", error);
+      toast.error("Fehler");
     }
   };
 
-  const prefillFromEmail = () => {
-    if (selectedEmail) {
-      const nameParts = selectedEmail.from_name.split(" ");
-      const firstName = nameParts[0] || "";
-      const lastName = nameParts.slice(1).join(" ") || "";
-      
-      setCreateForm({
-        ...createForm,
-        email: selectedEmail.from,
-        firstName: firstName,
-        lastName: lastName,
+  const disconnectAccount = async (accountId: string) => {
+    try {
+      await fetch(`http://127.0.0.1:8080/api/gmail/accounts/${accountId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${localStorage.getItem("jeremia_token")}` },
       });
-      setShowCreateDialog(true);
+      await checkConnection();
+      toast.success("Gmail-Konto getrennt");
+    } catch (error) {
+      toast.error("Fehler");
     }
+  };
+
+  const switchAccount = (accountId: string) => {
+    setSelectedAccountId(accountId);
+    setSelectedEmail(null);
+    loadEmails(accountId);
   };
 
   const handleSendEmail = async () => {
     try {
       if (!composeForm.to || !composeForm.subject) {
-        toast.error("Bitte f\u00fclle Empf\u00e4nger und Betreff aus");
+        toast.error("Bitte fülle Empfänger und Betreff aus");
         return;
       }
-
       const response = await fetch("http://127.0.0.1:8080/api/gmail/send", {
         method: "POST",
         headers: {
@@ -366,75 +304,149 @@ export const EmailsPage = () => {
           to: composeForm.to,
           subject: composeForm.subject,
           body: composeForm.body,
+          account_id: composeForm.accountId || selectedAccountId,
         }),
       });
-
-      if (!response.ok) {
-        throw new Error("Fehler beim Senden");
-      }
-
-      toast.success("E-Mail erfolgreich gesendet!");
+      if (!response.ok) throw new Error("Fehler");
+      toast.success("E-Mail gesendet!");
       setShowComposeDialog(false);
-      setShowReplyBox(false);
-      setComposeForm({
-        to: "",
-        subject: "",
-        body: "",
-      });
+      setComposeForm({ to: "", subject: "", body: "", accountId: "" });
+      loadEmails();
     } catch (error) {
-      toast.error("Fehler beim Senden der E-Mail");
-      console.error(error);
+      toast.error("Fehler beim Senden");
     }
   };
 
-  const replyToEmail = () => {
-    if (selectedEmail) {
-      const quotedText = selectedEmail.body_text.split("\n").join("\n> ");
-      const defaultSig = signatures.find(s => s.isDefault);
-      const replyBody = `
-
----
-Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEmail.from_name}:
-> ${quotedText}`;
-      
-      setComposeForm({
-        to: selectedEmail.from,
-        subject: selectedEmail.subject.startsWith("Re: ") 
-          ? selectedEmail.subject 
-          : `Re: ${selectedEmail.subject}`,
-        body: defaultSig ? replyBody + "\n\n" + defaultSig.content : replyBody,
-      });
-      if (defaultSig) {
-        setSelectedSignatureId(defaultSig.id);
+  const handleCreateLead = async () => {
+    try {
+      if (!createForm.email || !createForm.firstName || !createForm.lastName) {
+        toast.error("Bitte fülle alle Pflichtfelder aus");
+        return;
       }
-      setShowReplyBox(true);
+      const response = await fetch("http://127.0.0.1:8080/api/leads", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+        },
+        body: JSON.stringify({
+          email: createForm.email,
+          first_name: createForm.firstName,
+          last_name: createForm.lastName,
+          company_name: createForm.companyName || "",
+          segment: createForm.segment,
+          stage: createForm.stage,
+        }),
+      });
+      if (!response.ok) throw new Error("Fehler");
+      toast.success("Lead angelegt!");
+      setShowCreateDialog(false);
+      setCreateForm({ type: "lead", stage: "LEAD_LIST", segment: "ENDKUNDE", email: "", firstName: "", lastName: "", companyName: "" });
+    } catch (error) {
+      toast.error("Fehler beim Anlegen");
     }
   };
 
-  if (loading) {
+  const prefillFromEmail = () => {
+    if (selectedEmail) {
+      const nameParts = selectedEmail.from_name.split(" ");
+      setCreateForm({
+        ...createForm,
+        email: selectedEmail.from,
+        firstName: nameParts[0] || "",
+        lastName: nameParts.slice(1).join(" ") || "",
+      });
+      setShowCreateDialog(true);
+    }
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+    }
+    return date.toLocaleDateString("de-DE", { day: "2-digit", month: "short" });
+  };
+
+  const formatFullDate = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString("de-DE", {
+      month: "long",
+      day: "2-digit",
+      year: "numeric",
+    }) + ", " + date.toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(1) + " MB";
+  };
+
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      "bg-orange-500", "bg-teal-500", "bg-blue-500", "bg-purple-600",
+      "bg-rose-500", "bg-emerald-500", "bg-indigo-500", "bg-cyan-500",
+      "bg-amber-500", "bg-pink-500", "bg-violet-500", "bg-lime-600",
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+      hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+  };
+
+  const getInitials = (name: string) => {
+    return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
+  };
+
+  const getCurrentAccountEmail = () => {
+    const account = allAccounts.find(acc => acc.id === selectedAccountId);
+    return account?.email || "";
+  };
+
+  const unreadCount = emails.filter(e => !e.is_read).length;
+
+  // Loading
+  if (loading && !isConnected) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Lade E-Mails...</p>
+      <div className="flex items-center justify-center min-h-[600px]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-teal-600"></div>
       </div>
     );
   }
 
+  // Not connected
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Card className="w-[400px]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5" />
-              Gmail verbinden
-            </CardTitle>
+      <div className="flex items-center justify-center min-h-[600px]">
+        <Card className="w-[420px]">
+          <CardHeader className="text-center pb-2">
+            <div className="mx-auto w-16 h-16 bg-gradient-to-br from-teal-400 to-teal-600 rounded-2xl flex items-center justify-center mb-3">
+              <EnvelopeIcon className="h-8 w-8 text-white" />
+            </div>
+            <CardTitle className="text-xl">Gmail verbinden</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 text-center">
             <p className="text-sm text-muted-foreground">
-              Verbinde dein Gmail-Konto, um E-Mails direkt in Jeremias zu verwalten.
+              Verbinde dein Gmail-Konto, um E-Mails direkt in Jeremias zu verwalten und Kunden-Korrespondenz zu organisieren.
             </p>
-            <Button onClick={connectGmail} className="w-full">
-              <ExternalLink className="h-4 w-4 mr-2" />
+            <div className="bg-muted/50 rounded-lg p-3 text-left text-xs space-y-1">
+              <p className="font-medium text-sm mb-2">Nach der Verbindung kannst du:</p>
+              <p className="text-muted-foreground">✓ E-Mails lesen und senden</p>
+              <p className="text-muted-foreground">✓ Kontakte als Leads anlegen</p>
+              <p className="text-muted-foreground">✓ Mehrere Gmail-Konten verwalten</p>
+              <p className="text-muted-foreground">✓ Verbindung bleibt dauerhaft gespeichert</p>
+            </div>
+            <Button onClick={connectGmail} className="w-full bg-teal-600 hover:bg-teal-700">
+              <svg className="h-4 w-4 mr-2" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+                <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+                <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+              </svg>
               Mit Google verbinden
             </Button>
           </CardContent>
@@ -444,488 +456,533 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
   }
 
   return (
-    <div className="h-screen flex bg-gray-50">
-      {/* Sidebar */}
-      {showSidebar && (
-        <div className="w-64 bg-white border-r flex flex-col">
-          <div className="p-4">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center gap-2">
-                <Mail className="h-6 w-6 text-red-500" />
-                <h1 className="text-xl font-bold">Mailbox</h1>
-              </div>
-              <Button
-                onClick={() => setShowSidebar(false)}
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
+    <div className="h-[calc(100vh-7rem)] flex bg-background overflow-hidden">
+      {/* Left Sidebar */}
+      <div className="w-[200px] bg-card border-r border-border flex flex-col overflow-hidden">
+        {/* User Info */}
+        <div className="p-3 border-b border-border">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-teal-400 to-teal-600 flex items-center justify-center text-white font-semibold text-xs">
+              {getInitials(getCurrentAccountEmail().split('@')[0] || "U")}
             </div>
-            
-            <Button onClick={() => setShowComposeDialog(true)} className="w-full mb-6 bg-emerald-500 hover:bg-emerald-600">
-              <Mail className="h-4 w-4 mr-2" />
-              Neue Nachricht
-            </Button>
-            
-            <div className="space-y-1">
-              <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-emerald-50 text-emerald-700">
-                <div className="flex items-center gap-2">
-                  <Inbox className="h-4 w-4" />
-                  <span className="text-sm font-medium">Inbox</span>
-                </div>
-                {emails.length > 0 && (
-                  <Badge className="bg-emerald-600">{emails.filter(e => !e.is_read).length}</Badge>
-                )}
-              </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium truncate">{getCurrentAccountEmail().split('@')[0]}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{getCurrentAccountEmail()}</p>
             </div>
           </div>
         </div>
-      )}
-      
-      {/* Toggle Sidebar Button (when hidden) */}
-      {!showSidebar && (
-        <div className="w-12 bg-white border-r flex items-start justify-center pt-4">
-          <Button
-            onClick={() => setShowSidebar(true)}
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
+
+        {/* Compose Button */}
+        <div className="p-2">
+          <Button 
+            onClick={() => setShowComposeDialog(true)} 
+            className="w-full bg-teal-600 hover:bg-teal-700 text-white h-8 gap-2 text-sm"
           >
-            <ChevronRight className="h-4 w-4" />
+            <PencilSquareIcon className="h-4 w-4" />
+            Verfassen
           </Button>
         </div>
-      )}
+
+        {/* Navigation */}
+        <ScrollArea className="flex-1">
+          <nav className="px-2 space-y-0.5">
+            <button className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 font-medium">
+              <div className="flex items-center gap-2">
+                <InboxIcon className="h-4 w-4" />
+                <span>Posteingang</span>
+              </div>
+              {unreadCount > 0 && (
+                <span className="text-[10px] bg-teal-600 text-white px-1.5 py-0.5 rounded">{unreadCount}</span>
+              )}
+            </button>
+            
+            <button className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
+              <div className="flex items-center gap-2">
+                <StarIcon className="h-4 w-4" />
+                <span>Markiert</span>
+              </div>
+            </button>
+            
+            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
+              <PaperAirplaneIcon className="h-4 w-4" />
+              <span>Gesendet</span>
+            </button>
+            
+            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
+              <DocumentTextIcon className="h-4 w-4" />
+              <span>Entwürfe</span>
+            </button>
+            
+            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
+              <ArchiveBoxIcon className="h-4 w-4" />
+              <span>Archiv</span>
+            </button>
+            
+            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
+              <TrashIcon className="h-4 w-4" />
+              <span>Papierkorb</span>
+            </button>
+          </nav>
+
+          {/* Labels Section */}
+          <div className="px-2 mt-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Labels</span>
+              <button className="p-0.5 hover:bg-muted rounded">
+                <PlusIcon className="h-3 w-3 text-muted-foreground" />
+              </button>
+            </div>
+            <div className="space-y-0.5">
+              <button className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted">
+                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                <span>Kunden</span>
+              </button>
+              <button className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted">
+                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                <span>Projekte</span>
+              </button>
+              <button className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted">
+                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
+                <span>Anfragen</span>
+              </button>
+            </div>
+          </div>
+        </ScrollArea>
+
+        {/* Bottom Actions */}
+        <div className="p-2 border-t border-border space-y-1">
+          <button 
+            onClick={() => setShowAccountsDialog(true)}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-muted"
+          >
+            <Cog6ToothIcon className="h-5 w-5" />
+            <span>Einstellungen</span>
+          </button>
+        </div>
+      </div>
 
       {/* Email List */}
-      {showEmailList && (
-        <div className="w-96 bg-white border-r flex flex-col">
-        <div className="p-4 border-b space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                placeholder="Search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9 bg-gray-100 border-0"
-              />
+      <div className="w-[280px] border-r border-border flex flex-col bg-card overflow-hidden">
+        {/* Header */}
+        <div className="p-3 border-b border-border flex-shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-1">
+              <h2 className="font-semibold text-sm">Posteingang</h2>
+              <ChevronDownIcon className="h-3 w-3 text-muted-foreground" />
             </div>
-            <Button
-              onClick={() => setShowEmailList(false)}
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8 ml-2"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            <button onClick={() => loadEmails(selectedAccountId || undefined)} className="p-1 hover:bg-muted rounded" title="Aktualisieren">
+              <ArrowUturnLeftIcon className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          </div>
+          <p className="text-[10px] text-muted-foreground mb-2">{filteredEmails.length} Nachrichten</p>
+          <div className="relative">
+            <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Suchen..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-7 h-7 text-xs bg-muted/50 border-0"
+            />
           </div>
         </div>
-        
-        <ScrollArea className="flex-1">
-          {filteredEmails.map((email) => {
-            const initials = email.from_name
-              .split(" ")
-              .map((n) => n[0])
-              .join("")
-              .toUpperCase()
-              .slice(0, 2);
-            
-            const colors = [
-              "bg-blue-500",
-              "bg-green-500",
-              "bg-purple-500",
-              "bg-pink-500",
-              "bg-yellow-500",
-              "bg-red-500",
-            ];
-            const colorIndex = email.from.charCodeAt(0) % colors.length;
 
-            return (
-              <div
-                key={email.id}
-                onClick={() => loadEmailDetails(email.id)}
-                className={`p-4 border-b cursor-pointer hover:bg-gray-50 transition-colors ${
-                  selectedEmail?.id === email.id ? "bg-gray-100" : ""
-                }`}
-              >
-                <div className="flex gap-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white text-sm font-semibold ${colors[colorIndex]}`}>
-                    {initials}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between mb-1">
-                      <p className={`text-sm truncate ${
-                        !email.is_read ? "font-bold" : "font-medium"
-                      }`}>
-                        {email.from_name}
-                      </p>
-                      <span className="text-xs text-gray-500 ml-2">{formatDate(email.date)}</span>
+        {/* Email List */}
+        <ScrollArea className="flex-1">
+          {loading ? (
+            <div className="p-6 text-center">
+              <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-teal-600 mx-auto"></div>
+            </div>
+          ) : filteredEmails.length === 0 ? (
+            <div className="p-6 text-center text-muted-foreground">
+              <InboxIcon className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              <p className="text-xs">Keine E-Mails</p>
+            </div>
+          ) : (
+            <div>
+              {filteredEmails.map((email) => (
+                <button
+                  key={email.id}
+                  onClick={() => loadEmailDetails(email.id)}
+                  className={`w-full text-left px-3 py-2 hover:bg-muted/50 border-b border-border transition-colors ${
+                    selectedEmail?.id === email.id ? "bg-muted" : ""
+                  }`}
+                >
+                  <div className="flex gap-2">
+                    {/* Avatar */}
+                    <div className={`w-8 h-8 rounded-full ${getAvatarColor(email.from_name)} flex items-center justify-center text-white text-[10px] font-semibold flex-shrink-0`}>
+                      {getInitials(email.from_name)}
                     </div>
-                    <p className="text-sm text-gray-600 truncate mb-1">{email.subject}</p>
-                    <p className="text-xs text-gray-400 line-clamp-1">{email.snippet}</p>
-                    {!email.is_read && (
-                      <Badge className="mt-1 h-5 bg-emerald-600">1</Badge>
-                    )}
+                    
+                    {/* Content */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-1 mb-0.5">
+                        <span 
+                          className={`text-xs ${!email.is_read ? "font-semibold text-foreground" : "text-gray-600 dark:text-gray-400"}`}
+                          style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', maxWidth: '130px' }}
+                        >
+                          {email.from_name}
+                        </span>
+                        <span className="text-[10px] text-gray-500 dark:text-gray-400 flex-shrink-0">{formatTime(email.date)}</span>
+                      </div>
+                      <p 
+                        className={`text-xs ${!email.is_read ? "font-medium text-foreground" : "text-gray-600 dark:text-gray-400"}`}
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+                      >
+                        {email.subject || "(Kein Betreff)"}
+                      </p>
+                      <p 
+                        className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5"
+                        style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+                      >
+                        {email.snippet}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                </button>
+              ))}
+            </div>
+          )}
         </ScrollArea>
-        </div>
-      )}
-      
-      {/* Toggle Email List Button (when hidden) */}
-      {!showEmailList && (
-        <div className="w-12 bg-white border-r flex items-start justify-center pt-4">
-          <Button
-            onClick={() => setShowEmailList(true)}
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
+      </div>
 
       {/* Email Detail */}
-      {showEmailDetail && selectedEmail && (
-      <div className="flex-1 bg-white">
+      <div className="flex-1 flex flex-col bg-background overflow-hidden">
         {selectedEmail ? (
-          <div className="h-full flex flex-col">
-            <div className="p-6 border-b">
-              <div className="flex items-start justify-between mb-4">
-                <div className="flex-1">
-                  <p className="text-xs text-gray-500 mb-1">
-                    {new Date(selectedEmail.date).toLocaleDateString("de-DE", {
-                      weekday: "long",
-                      day: "2-digit",
-                      month: "long",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </p>
-                  <h2 className="text-2xl font-bold">{selectedEmail.subject}</h2>
-                </div>
-                <div className="flex gap-2">
-                  <Button onClick={prefillFromEmail} size="sm" className="bg-emerald-500 hover:bg-emerald-600">
-                    <UserPlus className="h-4 w-4 mr-2" />
-                    Lead/Kunde anlegen
-                  </Button>
-                  <Button
-                    onClick={() => setShowEmailDetail(false)}
-                    size="icon"
-                    variant="ghost"
-                    className="h-8 w-8"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
+          <>
+            {/* Toolbar */}
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Button onClick={prefillFromEmail} size="sm" className="gap-1.5 bg-teal-600 hover:bg-teal-700">
+                  <UserPlusIcon className="h-4 w-4" />
+                  Als Lead anlegen
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-1.5"
+                  onClick={() => {
+                    setReplyForm({ body: "" });
+                    setShowReplyDialog(true);
+                  }}
+                >
+                  <ArrowUturnLeftIcon className="h-4 w-4" />
+                  Antworten
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-1.5"
+                  onClick={() => {
+                    setForwardForm({ to: "", body: "", cc: "", bcc: "" });
+                    setShowForwardDialog(true);
+                  }}
+                >
+                  <ArrowUturnRightIcon className="h-4 w-4" />
+                  Weiterleiten
+                </Button>
+                <div className="w-px h-6 bg-border mx-1"></div>
+                <button 
+                  className="p-2 hover:bg-muted rounded-lg" 
+                  title="Archivieren"
+                  onClick={async () => {
+                    if (!selectedEmail) return;
+                    try {
+                      const type = selectedAccountType || "gmail";
+                      const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
+                      const res = await fetch(`http://127.0.0.1:8080${baseUrl}/emails/${selectedEmail.id}/archive`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${localStorage.getItem("jeremia_token")}` },
+                      });
+                      if (!res.ok) throw new Error();
+                      toast.success("E-Mail archiviert");
+                      setSelectedEmail(null);
+                      loadEmails(selectedAccountId || undefined, selectedAccountType || undefined);
+                    } catch {
+                      toast.error("Fehler beim Archivieren");
+                    }
+                  }}
+                >
+                  <ArchiveBoxIcon className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <button 
+                  className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg" 
+                  title="Löschen"
+                  onClick={async () => {
+                    if (!selectedEmail) return;
+                    try {
+                      const type = selectedAccountType || "gmail";
+                      const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
+                      const res = await fetch(`http://127.0.0.1:8080${baseUrl}/emails/${selectedEmail.id}/trash`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${localStorage.getItem("jeremia_token")}` },
+                      });
+                      if (!res.ok) throw new Error();
+                      toast.success("E-Mail gelöscht");
+                      setSelectedEmail(null);
+                      loadEmails(selectedAccountId || undefined, selectedAccountType || undefined);
+                    } catch {
+                      toast.error("Fehler beim Löschen");
+                    }
+                  }}
+                >
+                  <TrashIcon className="h-4 w-4 text-muted-foreground hover:text-red-500" />
+                </button>
+                <button 
+                  className="p-2 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg" 
+                  title="Mit Stern markieren"
+                  onClick={async () => {
+                    if (!selectedEmail) return;
+                    const isStarred = selectedEmail.labels?.includes('STARRED');
+                    try {
+                      const res = await fetch(`http://127.0.0.1:8080/api/gmail/emails/${selectedEmail.id}/${isStarred ? 'unstar' : 'star'}`, {
+                        method: "POST",
+                        headers: { Authorization: `Bearer ${localStorage.getItem("jeremia_token")}` },
+                      });
+                      if (!res.ok) throw new Error();
+                      toast.success(isStarred ? "Markierung entfernt" : "E-Mail markiert");
+                      // Update local state
+                      setSelectedEmail({
+                        ...selectedEmail,
+                        labels: isStarred 
+                          ? selectedEmail.labels.filter(l => l !== 'STARRED')
+                          : [...(selectedEmail.labels || []), 'STARRED']
+                      });
+                    } catch {
+                      toast.error("Fehler beim Markieren");
+                    }
+                  }}
+                >
+                  {selectedEmail?.labels?.includes('STARRED') 
+                    ? <StarIconSolid className="h-4 w-4 text-amber-500" />
+                    : <StarIcon className="h-4 w-4 text-muted-foreground hover:text-amber-500" />
+                  }
+                </button>
               </div>
-              
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-white font-semibold">
-                  {selectedEmail.from_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)}
-                </div>
-                <div>
-                  <p className="font-semibold">{selectedEmail.from_name}</p>
-                  <p className="text-sm text-gray-500">{selectedEmail.from}</p>
-                </div>
+              <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                <span>1 von {filteredEmails.length}</span>
+                <button className="p-1 hover:bg-muted rounded">←</button>
+                <button className="p-1 hover:bg-muted rounded">→</button>
               </div>
-              
-              {selectedEmail.has_attachments && (
-                <div className="mt-4 pt-4 border-t">
-                  <p className="text-sm font-medium mb-2">Anhänge:</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedEmail.attachments.map((att) => (
-                      <Badge key={att.id} variant="outline" className="flex items-center gap-1">
-                        <Paperclip className="h-3 w-3" />
-                        {att.filename}
-                        <span className="text-muted-foreground">({formatFileSize(att.size)})</span>
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
-            
-            <ScrollArea className="flex-1 p-6">
-              <div
-                className="prose max-w-none"
-                dangerouslySetInnerHTML={{ __html: selectedEmail.body_html || selectedEmail.body_text }}
-              />
-              
-              {!showReplyBox && (
-                <div className="mt-6 pt-6 border-t">
-                  <Button onClick={replyToEmail} variant="outline" className="w-full">
-                    <Reply className="h-4 w-4 mr-2" />
-                    Antworten
-                  </Button>
-                </div>
-              )}
-              
-              {showReplyBox && (
-                <div className="mt-6 pt-6 border-t space-y-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-semibold">Antwort verfassen</h3>
-                    <Button onClick={() => setShowReplyBox(false)} variant="ghost" size="sm">
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div className="space-y-2">
-                      <Label className="text-sm">An</Label>
-                      <Input
-                        type="email"
-                        value={composeForm.to}
-                        onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
-                        placeholder="empfaenger@example.com"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="text-sm">Betreff</Label>
-                      <Input
-                        value={composeForm.subject}
-                        onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
-                        placeholder="Betreff"
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="text-sm">Nachricht</Label>
-                      <textarea
-                        className="w-full min-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                        value={composeForm.body}
-                        onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
-                        placeholder="Deine Nachricht..."
-                      />
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <Label className="text-sm">Signatur</Label>
-                      <div className="flex gap-2">
-                        <Select value={selectedSignatureId} onValueChange={setSelectedSignatureId}>
-                          <SelectTrigger className="flex-1">
-                            <SelectValue placeholder="Signatur wählen" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {signatures.map((sig) => (
-                              <SelectItem key={sig.id} value={sig.id}>
-                                {sig.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button onClick={insertSignature} variant="outline" size="sm" disabled={!selectedSignatureId}>
-                          Einfügen
-                        </Button>
-                        <Button onClick={() => setShowSignatureDialog(true)} variant="outline" size="sm">
-                          <Plus className="h-4 w-4" />
-                        </Button>
+
+            {/* Email Content */}
+            <ScrollArea className="flex-1 overflow-auto">
+              <div className="p-4">
+                {/* Date & Subject */}
+                <p className="text-xs text-muted-foreground mb-1">{formatFullDate(selectedEmail.date)}</p>
+                <h1 className="text-lg font-semibold mb-4">{selectedEmail.subject || "(Kein Betreff)"}</h1>
+
+                {/* Message Card */}
+                <div className="bg-card border border-border rounded-lg p-4">
+                  {/* Sender Info */}
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex gap-2">
+                      <div className={`w-9 h-9 rounded-full ${getAvatarColor(selectedEmail.from_name)} flex items-center justify-center text-white text-sm font-semibold`}>
+                        {getInitials(selectedEmail.from_name)}
+                      </div>
+                      <div>
+                        <p className="font-medium text-sm">{selectedEmail.from_name}</p>
+                        <p className="text-xs text-muted-foreground">{selectedEmail.from}</p>
                       </div>
                     </div>
-                    
-                    <div className="flex gap-2 pt-2">
-                      <Button onClick={() => setShowReplyBox(false)} variant="outline" className="flex-1">
-                        Abbrechen
-                      </Button>
-                      <Button onClick={handleSendEmail} className="flex-1 bg-emerald-500 hover:bg-emerald-600">
-                        <Mail className="h-4 w-4 mr-2" />
-                        Senden
-                      </Button>
+                    <span className="text-xs text-muted-foreground">{formatTime(selectedEmail.date)}</span>
+                  </div>
+
+                  {/* To field */}
+                  <div className="flex items-center gap-2 mb-3 text-xs">
+                    <span className="text-muted-foreground">An</span>
+                    <div className="flex items-center gap-1 bg-muted px-2 py-0.5 rounded-full">
+                      <span className="text-xs">Ich</span>
                     </div>
                   </div>
+
+                  {/* Email Body */}
+                  <div className="prose prose-sm max-w-none dark:prose-invert text-sm">
+                    <div dangerouslySetInnerHTML={{ __html: selectedEmail.body_html || selectedEmail.body_text.replace(/\n/g, '<br/>') }} />
+                  </div>
+
+                  {/* Attachments */}
+                  {selectedEmail.has_attachments && selectedEmail.attachments.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-border">
+                      <p className="text-xs font-medium mb-2">Anhänge ({selectedEmail.attachments.length})</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedEmail.attachments.map((att) => (
+                          <div key={att.id} className="flex items-center gap-2 px-2 py-1.5 bg-muted rounded text-xs hover:bg-muted/80 cursor-pointer">
+                            <PaperClipIcon className="h-4 w-4 text-red-500" />
+                            <span className="truncate max-w-[150px]">{att.filename}</span>
+                            <span className="text-muted-foreground text-xs">{formatFileSize(att.size)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              )}
+
+              </div>
             </ScrollArea>
-          </div>
+          </>
         ) : (
-          <div className="h-full flex items-center justify-center text-gray-400">
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
             <div className="text-center">
-              <Mail className="h-16 w-16 mx-auto mb-4 opacity-20" />
-              <p>Wähle eine E-Mail aus, um sie anzuzeigen</p>
+              <EnvelopeIcon className="h-12 w-12 mx-auto mb-3 opacity-20" />
+              <p>Wähle eine E-Mail aus der Liste</p>
             </div>
           </div>
         )}
       </div>
-      )}
-      
-      {/* Toggle Email Detail Button (when hidden) */}
-      {!showEmailDetail && selectedEmail && (
-        <div className="w-12 bg-white flex items-start justify-center pt-4">
-          <Button
-            onClick={() => setShowEmailDetail(true)}
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        </div>
-      )}
 
-      {/* Create Lead/Customer Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="sm:max-w-md">
+      {/* Compose Dialog */}
+      <Dialog open={showComposeDialog} onOpenChange={setShowComposeDialog}>
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Lead/Kunde anlegen</DialogTitle>
+            <DialogTitle>Neue E-Mail</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>E-Mail *</Label>
-              <Input
-                type="email"
-                value={createForm.email}
-                onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
-                placeholder="email@example.com"
-              />
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
+            {allAccounts.length > 1 && (
               <div className="space-y-2">
-                <Label>Vorname *</Label>
-                <Input
-                  value={createForm.firstName}
-                  onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })}
-                  placeholder="Max"
-                />
+                <Label>Von</Label>
+                <Select value={composeForm.accountId || selectedAccountId || ""} onValueChange={(v) => setComposeForm({ ...composeForm, accountId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Absender" /></SelectTrigger>
+                  <SelectContent>
+                    {allAccounts.map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.email} {acc.type === "microsoft" && "(Microsoft)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Nachname *</Label>
-                <Input
-                  value={createForm.lastName}
-                  onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })}
-                  placeholder="Mustermann"
-                />
-              </div>
-            </div>
-            
+            )}
             <div className="space-y-2">
-              <Label>Firma</Label>
-              <Input
-                value={createForm.companyName}
-                onChange={(e) => setCreateForm({ ...createForm, companyName: e.target.value })}
-                placeholder="Firma GmbH"
-              />
+              <Label>An *</Label>
+              <Input type="email" value={composeForm.to} onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })} placeholder="empfaenger@example.com" />
             </div>
-            
             <div className="space-y-2">
-              <Label>Segment *</Label>
-              <Select value={createForm.segment} onValueChange={(value) => setCreateForm({ ...createForm, segment: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ENDKUNDE">Endkunde</SelectItem>
-                  <SelectItem value="ENERGIEBERATER">Energieberater</SelectItem>
-                  <SelectItem value="HEIZUNGSBAUER">Heizungsbauer</SelectItem>
-                  <SelectItem value="HANDWERKER_KOOPERATION">Handwerker Kooperation</SelectItem>
-                  <SelectItem value="PROJEKTGESCHAEFT">Projektgeschäft</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Betreff *</Label>
+              <Input value={composeForm.subject} onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })} placeholder="Betreff" />
             </div>
-            
             <div className="space-y-2">
-              <Label>Phase *</Label>
-              <Select value={createForm.stage} onValueChange={(value) => setCreateForm({ ...createForm, stage: value })}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="LEAD_LIST">Lead Liste</SelectItem>
-                  <SelectItem value="FOLLOW_UP">Follow-Up</SelectItem>
-                  <SelectItem value="PRE_STAGE">Pre-Stage</SelectItem>
-                  <SelectItem value="STAGE">Stage</SelectItem>
-                  <SelectItem value="KUNDE">Kunde</SelectItem>
-                  <SelectItem value="BESTANDSKUNDE">Bestandskunde</SelectItem>
-                </SelectContent>
-              </Select>
+              <Label>Nachricht</Label>
+              <textarea value={composeForm.body} onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })} placeholder="Nachricht..." className="w-full min-h-[200px] p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-teal-500 bg-background" />
             </div>
-            
             <div className="flex gap-2 pt-4">
-              <Button onClick={() => setShowCreateDialog(false)} variant="outline" className="flex-1">
-                Abbrechen
-              </Button>
-              <Button onClick={handleCreateLeadOrCustomer} className="flex-1 bg-emerald-500 hover:bg-emerald-600">
-                Anlegen
-              </Button>
+              <Button onClick={() => setShowComposeDialog(false)} variant="outline" className="flex-1">Abbrechen</Button>
+              <Button onClick={handleSendEmail} className="flex-1 bg-teal-600 hover:bg-teal-700">Senden</Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Compose Email Dialog */}
-      <Dialog open={showComposeDialog} onOpenChange={setShowComposeDialog}>
-        <DialogContent className="sm:max-w-2xl">
+      {/* Create Lead Dialog */}
+      <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Neue E-Mail verfassen</DialogTitle>
+            <DialogTitle>Lead anlegen</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>An *</Label>
-              <Input
-                type="email"
-                value={composeForm.to}
-                onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
-                placeholder="empfaenger@example.com"
-              />
+              <Label>E-Mail *</Label>
+              <Input type="email" value={createForm.email} onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })} />
             </div>
-            
-            <div className="space-y-2">
-              <Label>Betreff *</Label>
-              <Input
-                value={composeForm.subject}
-                onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
-                placeholder="E-Mail-Betreff"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Nachricht</Label>
-              <textarea
-                value={composeForm.body}
-                onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
-                placeholder="Schreibe deine Nachricht..."
-                className="w-full min-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label className="text-sm">Signatur</Label>
-              <div className="flex gap-2">
-                <Select value={selectedSignatureId} onValueChange={setSelectedSignatureId}>
-                  <SelectTrigger className="flex-1">
-                    <SelectValue placeholder="Signatur wählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {signatures.map((sig) => (
-                      <SelectItem key={sig.id} value={sig.id}>
-                        {sig.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button onClick={insertSignature} variant="outline" size="sm" disabled={!selectedSignatureId}>
-                  Einfügen
-                </Button>
-                <Button onClick={() => setShowSignatureDialog(true)} variant="outline" size="sm">
-                  <Plus className="h-4 w-4" />
-                </Button>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Vorname *</Label>
+                <Input value={createForm.firstName} onChange={(e) => setCreateForm({ ...createForm, firstName: e.target.value })} />
+              </div>
+              <div className="space-y-2">
+                <Label>Nachname *</Label>
+                <Input value={createForm.lastName} onChange={(e) => setCreateForm({ ...createForm, lastName: e.target.value })} />
               </div>
             </div>
-            
+            <div className="space-y-2">
+              <Label>Firma</Label>
+              <Input value={createForm.companyName} onChange={(e) => setCreateForm({ ...createForm, companyName: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Segment</Label>
+              <Select value={createForm.segment} onValueChange={(v) => setCreateForm({ ...createForm, segment: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ENDKUNDE">Endkunde</SelectItem>
+                  <SelectItem value="ENERGIEBERATER">Energieberater</SelectItem>
+                  <SelectItem value="HEIZUNGSBAUER">Heizungsbauer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="flex gap-2 pt-4">
-              <Button onClick={() => setShowComposeDialog(false)} variant="outline" className="flex-1">
-                Abbrechen
-              </Button>
-              <Button onClick={handleSendEmail} className="flex-1 bg-emerald-500 hover:bg-emerald-600">
-                <Mail className="h-4 w-4 mr-2" />
+              <Button onClick={() => setShowCreateDialog(false)} variant="outline" className="flex-1">Abbrechen</Button>
+              <Button onClick={handleCreateLead} className="flex-1 bg-teal-600 hover:bg-teal-700">Anlegen</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reply Dialog */}
+      <Dialog open={showReplyDialog} onOpenChange={setShowReplyDialog}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Antworten</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>An</Label>
+              <Input 
+                value={selectedEmail?.from || ""} 
+                disabled 
+                className="bg-muted"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Betreff</Label>
+              <Input 
+                value={selectedEmail?.subject?.startsWith("Re:") ? selectedEmail.subject : `Re: ${selectedEmail?.subject || ""}`} 
+                disabled 
+                className="bg-muted"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Nachricht</Label>
+              <textarea 
+                value={replyForm.body} 
+                onChange={(e) => setReplyForm({ ...replyForm, body: e.target.value })} 
+                placeholder="Nachricht..." 
+                className="w-full min-h-[200px] p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-teal-500 bg-background" 
+              />
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button onClick={() => setShowReplyDialog(false)} variant="outline" className="flex-1">Abbrechen</Button>
+              <Button 
+                onClick={async () => {
+                  if (!selectedEmail || !replyForm.body.trim()) {
+                    toast.error("Bitte gib eine Nachricht ein");
+                    return;
+                  }
+                  try {
+                    const type = selectedAccountType || "gmail";
+                    const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
+                    const accountIdParam = type === "gmail" && selectedAccountId ? `?account_id=${selectedAccountId}` : "";
+                    const res = await fetch(`http://127.0.0.1:8080${baseUrl}/emails/${selectedEmail.id}/reply${accountIdParam}`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+                      },
+                      body: JSON.stringify({
+                        body: replyForm.body,
+                        account_id: selectedAccountId,
+                      }),
+                    });
+                    if (!res.ok) throw new Error();
+                    toast.success("Antwort gesendet!");
+                    setShowReplyDialog(false);
+                    setReplyForm({ body: "" });
+                    loadEmails(selectedAccountId || undefined, selectedAccountType || undefined);
+                  } catch {
+                    toast.error("Fehler beim Senden der Antwort");
+                  }
+                }} 
+                className="flex-1 bg-teal-600 hover:bg-teal-700"
+              >
                 Senden
               </Button>
             </div>
@@ -933,82 +990,179 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         </DialogContent>
       </Dialog>
 
-      {/* Signature Management Dialog */}
-      <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
+      {/* Forward Dialog */}
+      <Dialog open={showForwardDialog} onOpenChange={setShowForwardDialog}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Signaturen verwalten</DialogTitle>
+            <DialogTitle>Weiterleiten</DialogTitle>
           </DialogHeader>
-          <div className="space-y-6 py-4">
-            {/* Add New Signature */}
-            <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
-              <h3 className="font-semibold">Neue Signatur erstellen</h3>
-              <div className="space-y-3">
-                <div className="space-y-2">
-                  <Label>Name *</Label>
-                  <Input
-                    value={newSignature.name}
-                    onChange={(e) => setNewSignature({ ...newSignature, name: e.target.value })}
-                    placeholder="z.B. Geschäftlich, Privat, Support..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Signatur *</Label>
-                  <textarea
-                    value={newSignature.content}
-                    onChange={(e) => setNewSignature({ ...newSignature, content: e.target.value })}
-                    placeholder="Mit freundlichen Grüßen,\nMax Mustermann\nTelefon: +49 123 456789"
-                    className="w-full min-h-[120px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </div>
-                <Button onClick={saveSignature} className="w-full bg-emerald-500 hover:bg-emerald-600">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Signatur speichern
-                </Button>
+          <div className="space-y-4 py-4">
+            {allAccounts.length > 1 && (
+              <div className="space-y-2">
+                <Label>Von</Label>
+                <Select value={selectedAccountId || ""} onValueChange={(v) => setSelectedAccountId(v)}>
+                  <SelectTrigger><SelectValue placeholder="Absender" /></SelectTrigger>
+                  <SelectContent>
+                    {allAccounts.map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        {acc.email} {acc.type === "microsoft" && "(Microsoft)"}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
+            )}
+            <div className="space-y-2">
+              <Label>An *</Label>
+              <Input 
+                type="email" 
+                value={forwardForm.to} 
+                onChange={(e) => setForwardForm({ ...forwardForm, to: e.target.value })} 
+                placeholder="empfaenger@example.com" 
+              />
             </div>
-            
-            {/* Existing Signatures */}
-            <div className="space-y-3">
-              <h3 className="font-semibold">Gespeicherte Signaturen</h3>
-              {signatures.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">Noch keine Signaturen vorhanden</p>
-              ) : (
-                <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {signatures.map((sig) => (
-                    <div key={sig.id} className="p-3 border rounded-lg">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2 flex-1">
-                          <Button 
-                            onClick={() => setDefaultSignature(sig.id)} 
-                            variant="ghost" 
-                            size="sm" 
-                            className="h-8 w-8 p-0"
-                            title={sig.isDefault ? "Standard-Signatur" : "Als Standard setzen"}
-                          >
-                            <Star className={`h-4 w-4 ${sig.isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}`} />
-                          </Button>
-                          <p className="font-medium">{sig.name}</p>
-                          {sig.isDefault && (
-                            <Badge variant="secondary" className="text-xs">Standard</Badge>
-                          )}
-                        </div>
-                        <Button onClick={() => deleteSignature(sig.id)} variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <X className="h-4 w-4 text-red-500" />
-                        </Button>
-                      </div>
-                      <pre className="text-sm text-gray-600 whitespace-pre-wrap font-sans">{sig.content}</pre>
-                    </div>
-                  ))}
-                </div>
-              )}
+            <div className="space-y-2">
+              <Label>CC</Label>
+              <Input 
+                type="email" 
+                value={forwardForm.cc} 
+                onChange={(e) => setForwardForm({ ...forwardForm, cc: e.target.value })} 
+                placeholder="cc@example.com" 
+              />
             </div>
-            
-            <div className="flex justify-end pt-4">
-              <Button onClick={() => setShowSignatureDialog(false)} variant="outline">
-                Schließen
+            <div className="space-y-2">
+              <Label>BCC</Label>
+              <Input 
+                type="email" 
+                value={forwardForm.bcc} 
+                onChange={(e) => setForwardForm({ ...forwardForm, bcc: e.target.value })} 
+                placeholder="bcc@example.com" 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Betreff</Label>
+              <Input 
+                value={selectedEmail?.subject?.startsWith("Fwd:") ? selectedEmail.subject : `Fwd: ${selectedEmail?.subject || ""}`} 
+                disabled 
+                className="bg-muted"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Nachricht</Label>
+              <textarea 
+                value={forwardForm.body} 
+                onChange={(e) => setForwardForm({ ...forwardForm, body: e.target.value })} 
+                placeholder="Nachricht..." 
+                className="w-full min-h-[200px] p-3 border rounded-lg resize-none focus:outline-none focus:ring-2 focus:ring-teal-500 bg-background" 
+              />
+            </div>
+            <div className="flex gap-2 pt-4">
+              <Button onClick={() => setShowForwardDialog(false)} variant="outline" className="flex-1">Abbrechen</Button>
+              <Button 
+                onClick={async () => {
+                  if (!selectedEmail || !forwardForm.to.trim()) {
+                    toast.error("Bitte gib einen Empfänger ein");
+                    return;
+                  }
+                  try {
+                    const type = selectedAccountType || "gmail";
+                    const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
+                    const accountIdParam = type === "gmail" && selectedAccountId ? `?account_id=${selectedAccountId}` : "";
+                    const res = await fetch(`http://127.0.0.1:8080${baseUrl}/emails/${selectedEmail.id}/forward${accountIdParam}`, {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+                      },
+                      body: JSON.stringify({
+                        to: forwardForm.to,
+                        body: forwardForm.body,
+                        cc: forwardForm.cc || undefined,
+                        bcc: forwardForm.bcc || undefined,
+                        account_id: selectedAccountId,
+                      }),
+                    });
+                    if (!res.ok) throw new Error();
+                    toast.success("Weiterleitung gesendet!");
+                    setShowForwardDialog(false);
+                    setForwardForm({ to: "", body: "", cc: "", bcc: "" });
+                    loadEmails(selectedAccountId || undefined, selectedAccountType || undefined);
+                  } catch {
+                    toast.error("Fehler beim Senden der Weiterleitung");
+                  }
+                }} 
+                className="flex-1 bg-teal-600 hover:bg-teal-700"
+              >
+                Senden
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Accounts Dialog */}
+      <Dialog open={showAccountsDialog} onOpenChange={setShowAccountsDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>E-Mail-Konten verwalten</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {/* Microsoft Mail Account */}
+            {microsoftAccounts.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-muted-foreground">Microsoft Mail</h3>
+                {microsoftAccounts.map((account) => (
+                  <div key={account.id} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-10 h-10 rounded-full ${getAvatarColor(account.email.split('@')[0])} flex items-center justify-center text-white text-sm font-semibold`}>
+                        {getInitials(account.email.split('@')[0])}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{account.email}</p>
+                        <p className="text-xs text-muted-foreground">Microsoft Mail</p>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      Microsoft
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {/* Gmail Accounts */}
+            {gmailAccounts.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="text-sm font-medium text-muted-foreground">Gmail Konten</h3>
+                {gmailAccounts.map((account) => (
+              <div key={account.id} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-full ${getAvatarColor(account.email)} flex items-center justify-center text-white font-semibold`}>
+                    {getInitials(account.email.split('@')[0])}
+                  </div>
+                  <div>
+                    <p className="font-medium">{account.email}</p>
+                    {account.is_primary && <Badge variant="secondary" className="text-xs">Primär</Badge>}
+                  </div>
+                </div>
+                <div className="flex gap-1">
+                  {!account.is_primary && (
+                    <Button onClick={() => setAccountAsPrimary(account.id)} variant="ghost" size="sm">
+                      <CheckIcon className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <Button onClick={() => disconnectAccount(account.id)} variant="ghost" size="sm" className="text-red-500 hover:text-red-600">
+                    <XMarkIcon className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+                ))}
+                <Button onClick={connectGmail} className="w-full bg-teal-600 hover:bg-teal-700">
+                  <PlusIcon className="h-4 w-4 mr-2" />
+                  Weiteres Gmail-Konto verbinden
+                </Button>
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

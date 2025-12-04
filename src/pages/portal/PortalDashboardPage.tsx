@@ -2,33 +2,49 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/StatCard";
-import { FolderKanban, Receipt, ShoppingCart, TrendingUp } from "lucide-react";
-import { apiClient } from "@/api/mockApiClient";
-import { Project, Invoice } from "@/types";
+import { FolderKanban, Receipt, ShoppingCart, TrendingUp, Loader2 } from "lucide-react";
+import { customerPortalApi, CustomerStats } from "@/lib/apiClient";
 
 export const PortalDashboardPage = () => {
   const { currentUser } = useAuth();
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [stats, setStats] = useState<CustomerStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
   }, []);
 
   const loadData = async () => {
-    const [projectsData, invoicesData] = await Promise.all([
-      apiClient.getProjects(),
-      apiClient.getInvoices(),
-    ]);
-    // TODO: Filter by current customer
-    setProjects(projectsData);
-    setInvoices(invoicesData);
+    try {
+      setLoading(true);
+      setError(null);
+      const statsData = await customerPortalApi.getStats();
+      setStats(statsData);
+    } catch (err) {
+      console.error("Failed to load dashboard data:", err);
+      setError("Fehler beim Laden der Daten");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const openInvoices = invoices.filter(inv => inv.status === "SENT" || inv.status === "OVERDUE");
-  const openAmount = openInvoices.reduce((sum, inv) => sum + inv.amount, 0);
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-destructive">{error}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -44,19 +60,19 @@ export const PortalDashboardPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         <StatCard
           title="Aktive Projekte"
-          value={projects.length}
+          value={stats?.projects_count ?? 0}
           icon={FolderKanban}
           description="Projekte in Bearbeitung"
         />
         <StatCard
           title="Offene Rechnungen"
-          value={openInvoices.length}
+          value={stats?.unpaid_invoices_count ?? 0}
           icon={Receipt}
-          description={`${openAmount.toLocaleString("de-DE")} € ausstehend`}
+          description={`${(stats?.total_amount ?? 0).toLocaleString("de-DE")} € ausstehend`}
         />
         <StatCard
           title="Gesamtprojekte"
-          value={projects.length}
+          value={stats?.projects_count ?? 0}
           icon={TrendingUp}
           description="Alle Ihre Projekte"
         />

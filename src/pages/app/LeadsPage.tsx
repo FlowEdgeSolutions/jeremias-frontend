@@ -46,7 +46,6 @@ const segmentLabels: Record<Segment, string> = {
 const stageLabels: Record<PipelineStage, string> = {
   LEAD_LIST: "Leads",
   FOLLOW_UP: "Follow Up",
-  PRE_STAGE: "Pre Stage",
   STAGE: "Stage",
   KUNDE: "Kunde",
   BESTANDSKUNDE: "Bestandskunde",

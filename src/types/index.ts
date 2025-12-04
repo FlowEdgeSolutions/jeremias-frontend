@@ -3,7 +3,6 @@ export type Segment = "ENERGIEBERATER" | "ENDKUNDE" | "HEIZUNGSBAUER" | "HANDWER
 export type PipelineStage = 
   | "LEAD_LIST" 
   | "FOLLOW_UP" 
-  | "PRE_STAGE" 
   | "STAGE" 
   | "KUNDE" 
   | "BESTANDSKUNDE";
@@ -71,6 +70,8 @@ export interface Project {
   internal_notes?: string;
   deadline?: string;
   payload?: Record<string, unknown>;
+  order_confirmation_sent?: boolean;
+  order_confirmation_sent_at?: string;
   created_at: string;
   updated_at: string;
   // Legacy frontend fields for compatibility

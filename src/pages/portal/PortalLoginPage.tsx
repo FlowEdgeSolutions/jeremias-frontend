@@ -31,24 +31,13 @@ export const PortalLoginPage = () => {
 
     try {
       await login(email, password);
-      
-      // Get the page user was trying to access, or default based on role
-      const from = (location.state as any)?.from?.pathname;
-      // Navigation happens in useEffect after user state is updated
-      const user = await fetch('http://127.0.0.1:8080/api/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('jeremia_token')}`
-        }
-      }).then(r => r.json());
-      
-      if (user.role === "customer") {
-        navigate(from || "/portal/dashboard");
-      } else {
-        navigate("/app/leads");
-      }
+      // Navigation will happen automatically via the useEffect when currentUser is set
+      // Give it a moment to update state
+      setTimeout(() => {
+        window.location.href = "/app/emails";
+      }, 500);
     } catch (error) {
       // Error toast already shown by AuthContext
-    } finally {
       setIsLoading(false);
     }
   };

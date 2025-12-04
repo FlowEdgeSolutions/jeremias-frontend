@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Target, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X } from "lucide-react";
 
 const PRODUCT_LABELS: Record<string, string> = {
   "3D_MODELLIERUNG_HUELLE": "3D Modellierung (nur thermische Hülle)",
@@ -38,7 +38,6 @@ const SEGMENT_LABELS: Record<Segment, string> = {
 const STAGE_LABELS: Record<PipelineStage, string> = {
   LEAD_LIST: "Leadliste",
   FOLLOW_UP: "Follow Up",
-  PRE_STAGE: "Pre Stage",
   STAGE: "Stage",
   KUNDE: "Kunde",
   BESTANDSKUNDE: "Bestandskunde",
@@ -47,7 +46,6 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
 // Stages für Kunden (ohne LEAD_LIST)
 const CUSTOMER_STAGE_LABELS: Partial<Record<PipelineStage, string>> = {
   FOLLOW_UP: "Follow Up",
-  PRE_STAGE: "Pre Stage",
   STAGE: "Stage",
   KUNDE: "Kunde",
   BESTANDSKUNDE: "Bestandskunde",
@@ -56,7 +54,6 @@ const CUSTOMER_STAGE_LABELS: Partial<Record<PipelineStage, string>> = {
 const STAGE_ICONS: Record<PipelineStage, React.ComponentType<{ className?: string }>> = {
   LEAD_LIST: List,
   FOLLOW_UP: PhoneCall,
-  PRE_STAGE: Target,
   STAGE: Star,
   KUNDE: UserCheck,
   BESTANDSKUNDE: Users,
@@ -96,7 +93,6 @@ interface Signature {
 const STAGE_ICON_COLORS: Record<PipelineStage, string> = {
   LEAD_LIST: "text-gray-500",
   FOLLOW_UP: "text-blue-500",
-  PRE_STAGE: "text-yellow-500",
   STAGE: "text-sky-400",
   KUNDE: "text-green-500",
   BESTANDSKUNDE: "text-purple-500",

@@ -1,24 +1,27 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
-import { Project, Message } from "@/types";
-import { apiClient } from "@/api/mockApiClient";
+import { useParams, Link } from "react-router-dom";
+import { customerPortalApi, CustomerProject, messagesApi } from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { FileText, Send } from "lucide-react";
+import { FileText, Send, ArrowLeft, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { toast } from "sonner";
+import { Message } from "@/types";
 
 export const PortalProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const { currentUser } = useAuth();
-  const [project, setProject] = useState<Project | null>(null);
+  const [project, setProject] = useState<CustomerProject | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -27,43 +30,83 @@ export const PortalProjectDetailPage = () => {
   }, [id]);
 
   const loadProjectData = async (projectId: string) => {
-    const projects = await apiClient.getProjects();
-    const foundProject = projects.find(p => p.id === projectId);
-    setProject(foundProject || null);
+    try {
+      setLoading(true);
+      setError(null);
+      
+      // Load all projects and find the specific one
+      const projects = await customerPortalApi.getProjects();
+      const foundProject = projects.find(p => p.id === projectId);
+      setProject(foundProject || null);
 
-    const messagesData = await apiClient.getMessages(projectId);
-    setMessages(messagesData);
+      // Load messages for this project
+      try {
+        const messagesData = await messagesApi.getMessages(projectId);
+        setMessages(messagesData);
+      } catch {
+        // Messages might not exist yet
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error("Failed to load project:", err);
+      setError("Fehler beim Laden des Projekts");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !project || !currentUser) return;
 
-    // TODO: Replace with actual API call
-    await apiClient.sendMessage(
-      project.id,
-      newMessage,
-      "CUSTOMER",
-      currentUser.name
-    );
-
-    toast.success("Nachricht gesendet!");
-    setNewMessage("");
-    loadProjectData(project.id);
+    try {
+      setSending(true);
+      await messagesApi.createMessage(project.id, newMessage);
+      toast.success("Nachricht gesendet!");
+      setNewMessage("");
+      
+      // Reload messages
+      const messagesData = await messagesApi.getMessages(project.id);
+      setMessages(messagesData);
+    } catch (err) {
+      console.error("Failed to send message:", err);
+      toast.error("Fehler beim Senden der Nachricht");
+    } finally {
+      setSending(false);
+    }
   };
 
-  if (!project) {
+  if (loading) {
     return (
-      <div className="text-center py-12">
-        <p className="text-muted-foreground">Projekt nicht gefunden</p>
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (error || !project) {
+    return (
+      <div className="space-y-4">
+        <Link to="/portal/projects" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Zurück zu Projekten
+        </Link>
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">{error || "Projekt nicht gefunden"}</p>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">{project.productName}</h1>
-        <p className="text-muted-foreground mt-2">Projekt-ID: {project.id}</p>
+      <div className="flex items-center gap-4">
+        <Link to="/portal/projects" className="text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="h-5 w-5" />
+        </Link>
+        <div>
+          <h1 className="text-3xl font-bold text-foreground">{project.product_name}</h1>
+          <p className="text-muted-foreground mt-1">Projekt-ID: {project.id}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -75,22 +118,20 @@ export const PortalProjectDetailPage = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Produktcode</p>
-                <p className="font-medium">{project.productCode}</p>
+                <p className="font-medium">{project.product_code}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
                 <Badge variant="outline">{project.status}</Badge>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Erstellt am</p>
-                <p className="font-medium">
-                  {format(project.createdAt, "dd.MM.yyyy", { locale: de })}
-                </p>
+                <p className="text-sm text-muted-foreground">QC Status</p>
+                <Badge variant="outline">{project.qc_status}</Badge>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">Letztes Update</p>
+                <p className="text-sm text-muted-foreground">Erstellt am</p>
                 <p className="font-medium">
-                  {format(project.updatedAt, "dd.MM.yyyy", { locale: de })}
+                  {format(new Date(project.created_at), "dd.MM.yyyy", { locale: de })}
                 </p>
               </div>
             </div>
@@ -105,11 +146,9 @@ export const PortalProjectDetailPage = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="space-y-2">
-              <li className="text-sm text-muted-foreground">• Grundriss_V1.pdf</li>
-              <li className="text-sm text-muted-foreground">• Schnitt_V1.pdf</li>
-              <li className="text-sm text-muted-foreground">• 3D_Model.dwg</li>
-            </ul>
+            <p className="text-sm text-muted-foreground">
+              Keine Dateien verfügbar
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -120,24 +159,30 @@ export const PortalProjectDetailPage = () => {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-4 max-h-96 overflow-y-auto">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`p-4 rounded-lg ${
-                  message.senderType === "CUSTOMER"
-                    ? "bg-primary/10 ml-12"
-                    : "bg-muted mr-12"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-sm">{message.senderName}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {format(message.createdAt, "dd.MM.yyyy HH:mm", { locale: de })}
-                  </span>
+            {messages.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Noch keine Nachrichten
+              </p>
+            ) : (
+              messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`p-4 rounded-lg ${
+                    message.senderType === "CUSTOMER"
+                      ? "bg-primary/10 ml-12"
+                      : "bg-muted mr-12"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-sm">{message.senderName}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {format(new Date(message.createdAt), "dd.MM.yyyy HH:mm", { locale: de })}
+                    </span>
+                  </div>
+                  <p className="text-sm">{message.text}</p>
                 </div>
-                <p className="text-sm">{message.text}</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
 
           <Separator />
@@ -150,8 +195,15 @@ export const PortalProjectDetailPage = () => {
               rows={3}
             />
             <div className="flex justify-end">
-              <Button onClick={handleSendMessage} disabled={!newMessage.trim()}>
-                <Send className="h-4 w-4 mr-2" />
+              <Button 
+                onClick={handleSendMessage} 
+                disabled={!newMessage.trim() || sending}
+              >
+                {sending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
                 Nachricht senden
               </Button>
             </div>

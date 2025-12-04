@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { customersApi, projectsApi, usersApi } from "@/lib/apiClient";
 import { Customer, Segment, User } from "@/types";
@@ -8,17 +8,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Upload, X } from "lucide-react";
+import { ArrowLeft, Plus, Upload, X, Mail, Pencil, ChevronDown, Trash2 } from "lucide-react";
 
-const PRODUCT_OPTIONS = [
+// Default product options
+const DEFAULT_PRODUCT_OPTIONS = [
   { code: "HEIZLAST", name: "Heizlast", allowCustomCredits: true },
   { code: "HEIZLAST_HYDRAULISCH", name: "Heizlast, hydraulischer Abgleich", allowCustomCredits: true },
   { code: "ISFP_ERSTELLUNG", name: "iSFP Erstellung", allowCustomCredits: true },
   { code: "INDIVIDUELL", name: "Individuell", allowCustomCredits: true },
 ];
 
-const SPECIFICATION_OPTIONS = [
+// Default specification options
+const DEFAULT_SPECIFICATION_OPTIONS = [
   { label: "1 bis 2 WE (649€ netto)", net_price: "649.00", units: "1-2" },
   { label: "3 bis 5 WE (799€ netto)", net_price: "799.00", units: "3-5" },
   { label: "6 bis 9 WE (949€ netto)", net_price: "949.00", units: "6-9" },
@@ -28,7 +31,7 @@ const SPECIFICATION_OPTIONS = [
   { label: "Mehr als 22 WE (Sie erhalten ein individuelles Angebot)", net_price: "", units: "22+" },
 ];
 
-const SPECIFICATION_OPTIONS_HEIZLAST = [
+const DEFAULT_SPECIFICATION_OPTIONS_HEIZLAST = [
   { label: "1 bis 2 WE (449€ netto)", net_price: "449.00", units: "1-2" },
   { label: "3 bis 5 WE (599€ netto)", net_price: "599.00", units: "3-5" },
   { label: "6 bis 9 WE (749€ netto)", net_price: "749.00", units: "6-9" },
@@ -37,6 +40,46 @@ const SPECIFICATION_OPTIONS_HEIZLAST = [
   { label: "18 bis 22 WE (1199€ netto)", net_price: "1199.00", units: "18-22" },
   { label: "Mehr als 22 WE (sie erhalten ein individuelles Angebot)", net_price: "", units: "22+" },
 ];
+
+// LocalStorage keys
+const STORAGE_KEY_PRODUCTS = "jeremias_product_options";
+const STORAGE_KEY_SPECS = "jeremias_specification_options";
+const STORAGE_KEY_SPECS_HEIZLAST = "jeremias_specification_options_heizlast";
+
+// Helper functions for LocalStorage
+const loadProducts = () => {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY_PRODUCTS);
+    return stored ? JSON.parse(stored) : DEFAULT_PRODUCT_OPTIONS;
+  } catch {
+    return DEFAULT_PRODUCT_OPTIONS;
+  }
+};
+
+const saveProducts = (products: typeof DEFAULT_PRODUCT_OPTIONS) => {
+  try {
+    localStorage.setItem(STORAGE_KEY_PRODUCTS, JSON.stringify(products));
+  } catch (error) {
+    console.error("Failed to save products:", error);
+  }
+};
+
+const loadSpecs = (key: string, defaultSpecs: typeof DEFAULT_SPECIFICATION_OPTIONS) => {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : defaultSpecs;
+  } catch {
+    return defaultSpecs;
+  }
+};
+
+const saveSpecs = (key: string, specs: typeof DEFAULT_SPECIFICATION_OPTIONS) => {
+  try {
+    localStorage.setItem(key, JSON.stringify(specs));
+  } catch (error) {
+    console.error("Failed to save specs:", error);
+  }
+};
 
 export const CreateProjectPage = () => {
   const navigate = useNavigate();
@@ -56,12 +99,53 @@ export const CreateProjectPage = () => {
     content: "",
     assigned_user_id: "",
   });
+  const [sendOrderConfirmation, setSendOrderConfirmation] = useState(true);
   
+  const [productOptions, setProductOptions] = useState(loadProducts());
   const [allowCustomCredits, setAllowCustomCredits] = useState(false);
   const [showSpecificationDropdown, setShowSpecificationDropdown] = useState(false);
   const [showSpecificationInput, setShowSpecificationInput] = useState(false);
-  const [currentSpecOptions, setCurrentSpecOptions] = useState(SPECIFICATION_OPTIONS);
+  const [useCustomSpecification, setUseCustomSpecification] = useState(false);
+  const [currentSpecOptions, setCurrentSpecOptions] = useState(() => 
+    loadSpecs(STORAGE_KEY_SPECS, DEFAULT_SPECIFICATION_OPTIONS)
+  );
+  const [heizlastSpecOptions, setHeizlastSpecOptions] = useState(() =>
+    loadSpecs(STORAGE_KEY_SPECS_HEIZLAST, DEFAULT_SPECIFICATION_OPTIONS_HEIZLAST)
+  );
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  
+  // Edit specification inline state
+  const [isSpecDropdownOpen, setIsSpecDropdownOpen] = useState(false);
+  const specDropdownRef = useRef<HTMLDivElement>(null);
+  const [editingInlineIndex, setEditingInlineIndex] = useState<number | null>(null);
+  const [inlineEditLabel, setInlineEditLabel] = useState("");
+  const [inlineEditPrice, setInlineEditPrice] = useState("");
+  
+  // Add new product/specification state
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductCode, setNewProductCode] = useState("");
+  const [isAddingSpec, setIsAddingSpec] = useState(false);
+  const [newSpecLabel, setNewSpecLabel] = useState("");
+  const [newSpecPrice, setNewSpecPrice] = useState("");
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (specDropdownRef.current && !specDropdownRef.current.contains(event.target as Node)) {
+        setIsSpecDropdownOpen(false);
+      }
+    };
+    
+    if (isSpecDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isSpecDropdownOpen]);
 
   useEffect(() => {
     loadCustomers();
@@ -89,7 +173,7 @@ export const CreateProjectPage = () => {
   };
 
   const handleProductChange = (productCode: string) => {
-    const product = PRODUCT_OPTIONS.find(p => p.code === productCode);
+    const product = productOptions.find(p => p.code === productCode);
     if (product) {
       setFormData({
         ...formData,
@@ -105,21 +189,196 @@ export const CreateProjectPage = () => {
       if (productCode === "HEIZLAST") {
         setShowSpecificationDropdown(true);
         setShowSpecificationInput(false);
-        setCurrentSpecOptions(SPECIFICATION_OPTIONS_HEIZLAST);
+        setUseCustomSpecification(false);
+        setCurrentSpecOptions(heizlastSpecOptions);
       } else if (productCode === "HEIZLAST_HYDRAULISCH") {
         setShowSpecificationDropdown(true);
         setShowSpecificationInput(false);
-        setCurrentSpecOptions(SPECIFICATION_OPTIONS);
+        setUseCustomSpecification(false);
+        const specs = loadSpecs(STORAGE_KEY_SPECS, DEFAULT_SPECIFICATION_OPTIONS);
+        setCurrentSpecOptions(specs);
       } else if (productCode === "ISFP_ERSTELLUNG" || productCode === "INDIVIDUELL") {
         // Show input field for iSFP and Individuell
         setShowSpecificationDropdown(false);
         setShowSpecificationInput(true);
+        setUseCustomSpecification(false);
       } else {
         setShowSpecificationDropdown(false);
         setShowSpecificationInput(false);
+        setUseCustomSpecification(false);
       }
     }
   };
+  
+  const handleEditSpecification = (index: number, event: React.MouseEvent) => {
+    event.stopPropagation();
+    const spec = currentSpecOptions[index];
+    setEditingInlineIndex(index);
+    setInlineEditLabel(spec.label);
+    setInlineEditPrice(spec.net_price);
+  };
+  
+  const handleSaveInlineEdit = (index: number) => {
+    const updatedOptions = [...currentSpecOptions];
+    const oldSpec = updatedOptions[index];
+    updatedOptions[index] = {
+      ...updatedOptions[index],
+      label: inlineEditLabel,
+      net_price: inlineEditPrice,
+    };
+    setCurrentSpecOptions(updatedOptions);
+    
+    // Save to LocalStorage - determine which spec list we're editing
+    const isHeizlast = formData.product_code === "HEIZLAST";
+    if (isHeizlast) {
+      setHeizlastSpecOptions(updatedOptions);
+      saveSpecs(STORAGE_KEY_SPECS_HEIZLAST, updatedOptions);
+    } else {
+      saveSpecs(STORAGE_KEY_SPECS, updatedOptions);
+    }
+    
+    // Update form data if this specification was already selected
+    if (formData.product_specification === oldSpec.label) {
+      const calculatedCredits = inlineEditPrice ? Math.ceil(parseFloat(inlineEditPrice) / 30).toString() : "";
+      setFormData({
+        ...formData,
+        product_specification: inlineEditLabel,
+        net_price: inlineEditPrice,
+        credits: calculatedCredits,
+      });
+    }
+    
+    setEditingInlineIndex(null);
+    toast.success("Spezifikation aktualisiert");
+  };
+  
+  const handleCancelInlineEdit = () => {
+    setEditingInlineIndex(null);
+    setInlineEditLabel("");
+    setInlineEditPrice("");
+  };
+  
+  const handleDeleteSpecification = (index: number, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (window.confirm("Möchten Sie diese Spezifikation wirklich löschen?")) {
+      const updatedOptions = currentSpecOptions.filter((_, i) => i !== index);
+      setCurrentSpecOptions(updatedOptions);
+      
+      // Save to LocalStorage
+      const isHeizlast = formData.product_code === "HEIZLAST";
+      if (isHeizlast) {
+        setHeizlastSpecOptions(updatedOptions);
+        saveSpecs(STORAGE_KEY_SPECS_HEIZLAST, updatedOptions);
+      } else {
+        saveSpecs(STORAGE_KEY_SPECS, updatedOptions);
+      }
+      
+      // Clear form data if deleted spec was selected
+      if (formData.product_specification === currentSpecOptions[index].label) {
+        setFormData({
+          ...formData,
+          product_specification: "",
+          net_price: "",
+          credits: "",
+        });
+      }
+      
+      toast.success("Spezifikation gelöscht");
+    }
+  };
+  
+  const handleAddSpecification = () => {
+    if (!newSpecLabel.trim()) {
+      toast.error("Bitte geben Sie eine Bezeichnung ein");
+      return;
+    }
+    
+    const newSpec = {
+      label: newSpecLabel,
+      net_price: newSpecPrice || "",
+      units: "",
+    };
+    
+    const updatedOptions = [...currentSpecOptions, newSpec];
+    setCurrentSpecOptions(updatedOptions);
+    
+    // Save to LocalStorage
+    const isHeizlast = formData.product_code === "HEIZLAST";
+    if (isHeizlast) {
+      setHeizlastSpecOptions(updatedOptions);
+      saveSpecs(STORAGE_KEY_SPECS_HEIZLAST, updatedOptions);
+    } else {
+      saveSpecs(STORAGE_KEY_SPECS, updatedOptions);
+    }
+    
+    setNewSpecLabel("");
+    setNewSpecPrice("");
+    setIsAddingSpec(false);
+    toast.success("Spezifikation hinzugefügt");
+  };
+  
+  const handleAddProduct = () => {
+    if (!newProductName.trim() || !newProductCode.trim()) {
+      toast.error("Bitte geben Sie Name und Code ein");
+      return;
+    }
+    
+    // Check if code already exists
+    const existingProduct = productOptions.find(p => p.code === newProductCode.toUpperCase());
+    if (existingProduct) {
+      // Update existing product
+      const updatedProducts = productOptions.map(p => 
+        p.code === newProductCode.toUpperCase()
+          ? { ...p, name: newProductName }
+          : p
+      );
+      setProductOptions(updatedProducts);
+      saveProducts(updatedProducts);
+      toast.success("Produkt aktualisiert");
+    } else {
+      // Add new product
+      const newProduct = {
+        code: newProductCode.toUpperCase(),
+        name: newProductName,
+        allowCustomCredits: true,
+      };
+      
+      const updatedProducts = [...productOptions, newProduct];
+      setProductOptions(updatedProducts);
+      saveProducts(updatedProducts);
+      toast.success("Produkt hinzugefügt");
+    }
+    
+    setNewProductName("");
+    setNewProductCode("");
+    setIsAddingProduct(false);
+  };
+  
+  const handleDeleteProduct = (productCode: string, event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (window.confirm("Möchten Sie dieses Produkt wirklich löschen?")) {
+      const updatedProducts = productOptions.filter(p => p.code !== productCode);
+      setProductOptions(updatedProducts);
+      saveProducts(updatedProducts);
+      
+      // Clear form if deleted product was selected
+      if (formData.product_code === productCode) {
+        setFormData({
+          ...formData,
+          product_code: "",
+          product_name: "",
+          product_specification: "",
+          net_price: "",
+          credits: "",
+        });
+        setShowSpecificationDropdown(false);
+        setShowSpecificationInput(false);
+      }
+      
+      toast.success("Produkt gelöscht");
+    }
+  };
+  
 
   const handleSpecificationChange = (specLabel: string) => {
     const spec = currentSpecOptions.find(s => s.label === specLabel);
@@ -137,6 +396,35 @@ export const CreateProjectPage = () => {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files);
+      setUploadedFiles(prev => [...prev, ...filesArray]);
+      toast.success(`${filesArray.length} Datei(en) hinzugefügt`);
+    }
+  };
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const filesArray = Array.from(e.dataTransfer.files);
       setUploadedFiles(prev => [...prev, ...filesArray]);
       toast.success(`${filesArray.length} Datei(en) hinzugefügt`);
     }
@@ -167,9 +455,20 @@ export const CreateProjectPage = () => {
         credits: formData.credits || undefined,
         content: formData.content || undefined,
         assigned_user_id: formData.assigned_user_id,
+        send_order_confirmation: sendOrderConfirmation,
       });
       
-      toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}`);
+      // Show success message with order confirmation status
+      if (sendOrderConfirmation) {
+        if (project.order_confirmation_sent) {
+          toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}. Auftragsbestätigung wurde an den Kunden gesendet.`);
+        } else {
+          toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}`);
+          toast.warning("Auftragsbestätigung konnte nicht gesendet werden. Bitte prüfen Sie die Gmail-Verbindung.");
+        }
+      } else {
+        toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}`);
+      }
       navigate(`/app/projects/${project.id}`);
     } catch (error: unknown) {
       console.error("Error creating project:", error);
@@ -229,22 +528,94 @@ export const CreateProjectPage = () => {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="product">Produkt *</Label>
-              <Select
-                value={formData.product_code}
-                onValueChange={handleProductChange}
-              >
-                <SelectTrigger id="product">
-                  <SelectValue placeholder="Produkt auswählen..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {PRODUCT_OPTIONS.map((product) => (
-                    <SelectItem key={product.code} value={product.code}>
-                      {product.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="product">Produkt *</Label>
+                {!isAddingProduct && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setIsAddingProduct(true);
+                      setNewProductName("");
+                      setNewProductCode("");
+                    }}
+                    className="h-8 w-8 p-0"
+                    title="Neues Produkt hinzufügen"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+              {isAddingProduct ? (
+                <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+                  <Input
+                    value={newProductCode}
+                    onChange={(e) => setNewProductCode(e.target.value)}
+                    placeholder="Produktcode (z.B. NEUES_PRODUKT)"
+                    className="h-8"
+                  />
+                  <Input
+                    value={newProductName}
+                    onChange={(e) => setNewProductName(e.target.value)}
+                    placeholder="Produktname"
+                    className="h-8"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 flex-1"
+                      onClick={handleAddProduct}
+                    >
+                      Speichern
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 flex-1"
+                      onClick={() => {
+                        setIsAddingProduct(false);
+                        setNewProductName("");
+                        setNewProductCode("");
+                      }}
+                    >
+                      Abbrechen
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Select
+                  value={formData.product_code}
+                  onValueChange={handleProductChange}
+                >
+                  <SelectTrigger id="product">
+                    <SelectValue placeholder="Produkt auswählen..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {productOptions.map((product) => (
+                      <SelectItem key={product.code} value={product.code}>
+                        <div className="flex items-center justify-between w-full group">
+                          <span className="flex-1">{product.name}</span>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-5 w-5 p-0 text-destructive"
+                              onClick={(e) => handleDeleteProduct(product.code, e)}
+                              title="Produkt löschen"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -271,34 +642,205 @@ export const CreateProjectPage = () => {
 
             {showSpecificationDropdown && (
               <div className="space-y-2">
-                <Label htmlFor="product_specification">Produktspezifikation</Label>
-                <Select
-                  value={formData.product_specification}
-                  onValueChange={handleSpecificationChange}
-                >
-                  <SelectTrigger id="product_specification">
-                    <SelectValue placeholder="Wie viel Wohneinheiten hat das Objekt?" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {currentSpecOptions.map((spec) => (
-                      <SelectItem key={spec.label} value={spec.label}>
-                        {spec.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="product_specification">Produktspezifikation</Label>
+                  {!isAddingSpec && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIsAddingSpec(true);
+                        setNewSpecLabel("");
+                        setNewSpecPrice("");
+                      }}
+                      className="h-8 w-8 p-0"
+                      title="Neue Spezifikation hinzufügen"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {isAddingSpec && (
+                  <div className="space-y-2 p-3 border rounded-md bg-muted/30">
+                    <Input
+                      value={newSpecLabel}
+                      onChange={(e) => setNewSpecLabel(e.target.value)}
+                      placeholder="Bezeichnung (z.B. 1 bis 2 WE (649€ netto))"
+                      className="h-8"
+                    />
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={newSpecPrice}
+                      onChange={(e) => setNewSpecPrice(e.target.value)}
+                      placeholder="Netto Preis (€)"
+                      className="h-8"
+                    />
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 flex-1"
+                        onClick={handleAddSpecification}
+                      >
+                        Speichern
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 flex-1"
+                        onClick={() => {
+                          setIsAddingSpec(false);
+                          setNewSpecLabel("");
+                          setNewSpecPrice("");
+                        }}
+                      >
+                        Abbrechen
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <div className="relative" ref={specDropdownRef}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-between"
+                    onClick={() => setIsSpecDropdownOpen(!isSpecDropdownOpen)}
+                  >
+                    <span className={formData.product_specification ? "" : "text-muted-foreground"}>
+                      {formData.product_specification || "Wie viel Wohneinheiten hat das Objekt?"}
+                    </span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isSpecDropdownOpen ? "rotate-180" : ""}`} />
+                  </Button>
+                  {isSpecDropdownOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-popover border rounded-md shadow-md max-h-60 overflow-auto">
+                      {currentSpecOptions.map((spec, index) => (
+                        <div
+                          key={index}
+                          className={`p-2 ${editingInlineIndex !== index ? 'hover:bg-accent cursor-pointer group' : 'bg-accent'}`}
+                          onClick={() => {
+                            if (editingInlineIndex !== index) {
+                              handleSpecificationChange(spec.label);
+                              setIsSpecDropdownOpen(false);
+                            }
+                          }}
+                        >
+                          {editingInlineIndex === index ? (
+                            <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
+                              <Input
+                                value={inlineEditLabel}
+                                onChange={(e) => setInlineEditLabel(e.target.value)}
+                                placeholder="Bezeichnung"
+                                className="h-8"
+                                autoFocus
+                              />
+                              <Input
+                                type="number"
+                                step="0.01"
+                                value={inlineEditPrice}
+                                onChange={(e) => setInlineEditPrice(e.target.value)}
+                                placeholder="Preis (€)"
+                                className="h-8"
+                              />
+                              <div className="flex gap-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  className="h-7 flex-1"
+                                  onClick={() => handleSaveInlineEdit(index)}
+                                >
+                                  Speichern
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 flex-1"
+                                  onClick={handleCancelInlineEdit}
+                                >
+                                  Abbrechen
+                                </Button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-between">
+                              <span className="flex-1">{spec.label}</span>
+                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleEditSpecification(index, e);
+                                  }}
+                                  title="Spezifikation bearbeiten"
+                                >
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-destructive"
+                                  onClick={(e) => handleDeleteSpecification(index, e)}
+                                  title="Spezifikation löschen"
+                                >
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             {showSpecificationInput && (
               <div className="space-y-2">
-                <Label htmlFor="product_specification_input">Produktspezifikation</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="product_specification_input">Produktspezifikation</Label>
+                  {useCustomSpecification && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setUseCustomSpecification(false);
+                        setShowSpecificationInput(false);
+                        setShowSpecificationDropdown(true);
+                        // Clear the specification when switching back to dropdown
+                        setFormData({
+                          ...formData,
+                          product_specification: "",
+                          net_price: "",
+                          credits: "",
+                        });
+                      }}
+                      className="h-8 text-xs"
+                      title="Zurück zur Auswahl"
+                    >
+                      Zurück zur Auswahl
+                    </Button>
+                  )}
+                </div>
                 <Input
                   id="product_specification_input"
                   value={formData.product_specification}
                   onChange={(e) => setFormData({ ...formData, product_specification: e.target.value })}
-                  placeholder="z.B. Detaillierte Spezifikation eingeben..."
+                  placeholder={useCustomSpecification ? "Eigene Spezifikation eingeben (wird in Angebot und Rechnung übernommen)..." : "z.B. Detaillierte Spezifikation eingeben..."}
                 />
+                {useCustomSpecification && (
+                  <p className="text-xs text-muted-foreground">
+                    Dieser Text wird in das Angebot und die Rechnung übernommen.
+                  </p>
+                )}
               </div>
             )}
 
@@ -346,11 +888,11 @@ export const CreateProjectPage = () => {
                 onChange={(e) => setFormData({ ...formData, credits: e.target.value })}
                 className={!allowCustomCredits ? "bg-muted" : ""}
               />
-              <p className="text-xs text-muted-foreground">
-                {allowCustomCredits 
-                  ? "Credits können manuell eingegeben werden" 
-                  : "Automatisch berechnet: Netto Preis / 30"}
-              </p>
+              {allowCustomCredits && (
+                <p className="text-xs text-muted-foreground">
+                  Credits können manuell eingegeben werden
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -364,11 +906,39 @@ export const CreateProjectPage = () => {
               />
             </div>
 
+            {/* Order confirmation email checkbox */}
+            <div className="flex items-center gap-3 rounded-lg border p-4 bg-muted/30">
+              <Checkbox
+                id="send_order_confirmation"
+                checked={sendOrderConfirmation}
+                onCheckedChange={(checked) => setSendOrderConfirmation(checked === true)}
+              />
+              <div className="space-y-0.5 flex-1">
+                <Label htmlFor="send_order_confirmation" className="font-medium cursor-pointer">
+                  Auftragsbestätigung per E-Mail senden
+                </Label>
+                <p className="text-sm text-muted-foreground">
+                  Die Auftragsbestätigung (Angebot) wird an den Kunden gesendet.
+                </p>
+              </div>
+              <Mail className="h-4 w-4 text-muted-foreground" />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="file_upload">Dateien hochladen</Label>
-              <div className="border-2 border-dashed rounded-lg p-6">
+              <div
+                className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+                  isDragging
+                    ? "border-primary bg-primary/5"
+                    : "border-muted-foreground/25 hover:border-primary/50"
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
                 <div className="flex flex-col items-center justify-center gap-2">
-                  <Upload className="h-8 w-8 text-muted-foreground" />
+                  <Upload className={`h-8 w-8 transition-colors ${isDragging ? "text-primary" : "text-muted-foreground"}`} />
                   <div className="text-center">
                     <Label htmlFor="file_upload" className="cursor-pointer text-primary hover:underline">
                       Dateien auswählen
@@ -433,6 +1003,7 @@ export const CreateProjectPage = () => {
           </form>
         </CardContent>
       </Card>
+
     </div>
   );
 };

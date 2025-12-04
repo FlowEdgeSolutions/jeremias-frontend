@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Unlock, List, PhoneCall, Target, Star, UserCheck, Users } from "lucide-react";
+import { List, PhoneCall, Star, UserCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 
 const segmentLabels: Record<Segment, string> = {
@@ -29,7 +29,6 @@ const segmentLabels: Record<Segment, string> = {
 const stageLabels: Record<PipelineStage, string> = {
   LEAD_LIST: "Leadliste",
   FOLLOW_UP: "Follow Up",
-  PRE_STAGE: "Pre Stage",
   STAGE: "Stage",
   KUNDE: "Kunde",
   BESTANDSKUNDE: "Bestandskunde",
@@ -38,7 +37,6 @@ const stageLabels: Record<PipelineStage, string> = {
 const STAGE_ICONS: Record<PipelineStage, React.ComponentType<{ className?: string }>> = {
   LEAD_LIST: List,
   FOLLOW_UP: PhoneCall,
-  PRE_STAGE: Target,
   STAGE: Star,
   KUNDE: UserCheck,
   BESTANDSKUNDE: Users,
@@ -47,7 +45,6 @@ const STAGE_ICONS: Record<PipelineStage, React.ComponentType<{ className?: strin
 const STAGE_ICON_COLORS: Record<PipelineStage, string> = {
   LEAD_LIST: "text-gray-500",
   FOLLOW_UP: "text-blue-500",
-  PRE_STAGE: "text-yellow-500",
   STAGE: "text-sky-400",
   KUNDE: "text-green-500",
   BESTANDSKUNDE: "text-purple-500",
@@ -78,23 +75,6 @@ export const CustomersPage = () => {
     }
   };
 
-  const handleUnlockPortal = async (customerId: string) => {
-    try {
-      const response = await apiClient.customers.unlockPortalAccess(customerId);
-      toast.success(
-        <div>
-          <p className="font-semibold">Portalzugang freigeschaltet!</p>
-          <p className="text-sm mt-1">Temporäres Passwort: <code className="bg-muted px-1 py-0.5 rounded">{response.temporary_password}</code></p>
-          <p className="text-xs text-muted-foreground mt-1">{response.note}</p>
-        </div>
-      );
-      loadCustomers();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler beim Freischalten: " + message);
-    }
-  };
-
   const handleStageChange = async (customerId: string, newStage: PipelineStage) => {
     try {
       await apiClient.customers.changeStage(customerId, newStage);
@@ -114,7 +94,6 @@ export const CustomersPage = () => {
   const kanbanColumns = [
     { id: "LEAD_LIST", title: "Leadliste", items: filteredCustomers.filter(c => c.stage === "LEAD_LIST") },
     { id: "FOLLOW_UP", title: "Follow Up", items: filteredCustomers.filter(c => c.stage === "FOLLOW_UP") },
-    { id: "PRE_STAGE", title: "Pre Stage", items: filteredCustomers.filter(c => c.stage === "PRE_STAGE") },
     { id: "STAGE", title: "Stage", items: filteredCustomers.filter(c => c.stage === "STAGE") },
     { id: "KUNDE", title: "Kunde", items: filteredCustomers.filter(c => c.stage === "KUNDE") },
     { id: "BESTANDSKUNDE", title: "Bestandskunde", items: filteredCustomers.filter(c => c.stage === "BESTANDSKUNDE") },
@@ -148,20 +127,6 @@ export const CustomersPage = () => {
               <span className="font-medium text-foreground">{(customer.total_revenue || 0).toLocaleString("de-DE")} €</span>
             </div>
           </div>
-          {customer.stage === "PRE_STAGE" && (
-            <Button
-              size="sm"
-              variant="outline"
-              className="w-full mt-2"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleUnlockPortal(customer.id);
-              }}
-            >
-              <Unlock className="h-3 w-3 mr-2" />
-              Zugang freischalten
-            </Button>
-          )}
         </div>
         {/* Phase ändern Dropdown */}
         <div className="mt-3 pt-3 border-t" onClick={(e) => e.stopPropagation()}>
@@ -270,8 +235,6 @@ export const CustomersPage = () => {
                   <TableHead className="whitespace-nowrap">Stage</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Bestellungen</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Umsatz</TableHead>
-                  <TableHead className="whitespace-nowrap">Portal</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Aktionen</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -301,20 +264,7 @@ export const CustomersPage = () => {
                     <TableCell className="text-right font-medium whitespace-nowrap">
                       {(customer.total_revenue || 0).toLocaleString("de-DE")} €
                     </TableCell>
-                    <TableCell>
-                      {customer.stage !== "LEAD_LIST" && customer.stage !== "FOLLOW_UP" ? (
-                        <Badge variant="default">Zugang</Badge>
-                      ) : (
-                        <Badge variant="secondary">Kein Zugang</Badge>
-                      )}
-                    </TableCell>
                     <TableCell className="text-right">
-                      {customer.stage === "PRE_STAGE" && (
-                        <Button size="sm" variant="outline" onClick={() => handleUnlockPortal(customer.id)}>
-                          <Unlock className="h-3 w-3 mr-2" />
-                          Freischalten
-                        </Button>
-                      )}
                     </TableCell>
                   </TableRow>
                 ))}
