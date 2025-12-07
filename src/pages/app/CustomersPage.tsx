@@ -58,6 +58,7 @@ export const CustomersPage = () => {
 
   useEffect(() => {
     loadCustomers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSegment]);
 
   const loadCustomers = async () => {
@@ -226,20 +227,33 @@ export const CustomersPage = () => {
         </TabsContent>
 
         <TabsContent value="list" className="mt-6">
-          <div className="border rounded-lg bg-card overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="whitespace-nowrap">Name</TableHead>
-                  <TableHead className="whitespace-nowrap">Segment</TableHead>
-                  <TableHead className="whitespace-nowrap">Stage</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Bestellungen</TableHead>
-                  <TableHead className="text-right whitespace-nowrap">Umsatz</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCustomers.map((customer) => (
-                  <TableRow 
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+              <span className="ml-3 text-muted-foreground">Lade Kunden...</span>
+            </div>
+          ) : filteredCustomers.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <p>Keine Kunden gefunden</p>
+              {selectedSegment !== "ALL" && (
+                <p className="text-sm mt-2">Versuche einen anderen Segment-Filter</p>
+              )}
+            </div>
+          ) : (
+            <div className="border rounded-lg bg-card overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="whitespace-nowrap">Name</TableHead>
+                    <TableHead className="whitespace-nowrap">Segment</TableHead>
+                    <TableHead className="whitespace-nowrap">Stage</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Bestellungen</TableHead>
+                    <TableHead className="text-right whitespace-nowrap">Umsatz</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredCustomers.map((customer) => (
+                    <TableRow 
                     key={customer.id}
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => navigate(`/app/customers/${customer.id}`)}
@@ -268,9 +282,10 @@ export const CustomersPage = () => {
                     </TableCell>
                   </TableRow>
                 ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableBody>
+              </Table>
+            </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>

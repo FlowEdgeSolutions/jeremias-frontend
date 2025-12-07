@@ -47,6 +47,8 @@ interface Email {
   is_read: boolean;
   has_attachments: boolean;
   labels: string[];
+  account_type?: "gmail" | "microsoft";
+  account_email?: string;
 }
 
 interface EmailDetail {
@@ -98,7 +100,10 @@ export const EmailsPage = () => {
   const [microsoftAccounts, setMicrosoftAccounts] = useState<EmailAccount[]>([]);
   const [allAccounts, setAllAccounts] = useState<EmailAccount[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
-  const [selectedAccountType, setSelectedAccountType] = useState<"gmail" | "microsoft" | null>(null);
+  const [selectedAccountType, setSelectedAccountType] = useState<"gmail" | "microsoft" | "all" | null>(null);
+  const [gmailLabels, setGmailLabels] = useState<Array<{id: string; name: string; type: string}>>([]);
+  const [microsoftFolders, setMicrosoftFolders] = useState<Array<{id: string; name: string; unread_count: number}>>([]);
+  const [selectedFolder, setSelectedFolder] = useState<string | null>(null);
   const [composeForm, setComposeForm] = useState({
     to: "",
     subject: "",
@@ -119,6 +124,13 @@ export const EmailsPage = () => {
     checkConnection();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (selectedAccountId && selectedAccountType && selectedAccountType !== "all") {
+      loadFolders();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAccountId, selectedAccountType]);
 
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -176,6 +188,7 @@ export const EmailsPage = () => {
       
       if (gmailData.is_connected || microsoftData.is_connected) {
         loadEmails();
+        loadFolders();
       }
     } catch (error) {
       setIsConnected(false);
@@ -184,25 +197,136 @@ export const EmailsPage = () => {
     }
   };
 
-  const loadEmails = async (accountId?: string, accountType?: "gmail" | "microsoft") => {
+  const loadFolders = async () => {
+    try {
+      // Load Gmail labels
+      if (selectedAccountType === "gmail" && selectedAccountId) {
+        const response = await fetch(`http://127.0.0.1:8080/api/gmail/labels?account_id=${selectedAccountId}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setGmailLabels(data.labels || []);
+        }
+      } else {
+        setGmailLabels([]);
+      }
+      
+      // Load Microsoft Mail folders
+      if (selectedAccountType === "microsoft") {
+        const response = await fetch("http://127.0.0.1:8080/api/microsoft-mail/folders", {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setMicrosoftFolders(data.folders || []);
+        }
+      } else {
+        setMicrosoftFolders([]);
+      }
+    } catch (error) {
+      console.error("Error loading folders:", error);
+    }
+  };
+
+  const loadEmails = async (accountId?: string, accountType?: "gmail" | "microsoft" | "all", folderId?: string) => {
     try {
       setLoading(true);
       const type = accountType || selectedAccountType || "gmail";
-      const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
       
-      let url = `${baseUrl}/emails`;
-      if (type === "gmail" && accountId) {
-        url += `?account_id=${accountId}`;
+      if (type === "all") {
+        // Load emails from all accounts
+        const allEmails: Email[] = [];
+        
+        // Load Gmail emails
+        for (const gmailAccount of gmailAccounts) {
+          try {
+            let url = `http://127.0.0.1:8080/api/gmail/emails?account_id=${gmailAccount.id}`;
+            if (folderId) {
+              url += `&label_id=${folderId}`;
+            }
+            const response = await fetch(url, {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+              },
+            });
+            const data = await response.json();
+            const emailsWithSource = (data.emails || []).map((email: Email) => ({
+              ...email,
+              account_type: "gmail" as const,
+              account_email: gmailAccount.email,
+            }));
+            allEmails.push(...emailsWithSource);
+          } catch (error) {
+            console.error(`Error loading emails from ${gmailAccount.email}:`, error);
+          }
+        }
+        
+        // Load Microsoft Mail emails
+        for (const microsoftAccount of microsoftAccounts) {
+          try {
+            let url = `http://127.0.0.1:8080/api/microsoft-mail/emails`;
+            if (folderId) {
+              url += `?folder_id=${folderId}`;
+            }
+            const response = await fetch(url, {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+              },
+            });
+            const data = await response.json();
+            const emailsWithSource = (data.emails || []).map((email: Email) => ({
+              ...email,
+              account_type: "microsoft" as const,
+              account_email: microsoftAccount.email,
+            }));
+            allEmails.push(...emailsWithSource);
+          } catch (error) {
+            console.error(`Error loading emails from ${microsoftAccount.email}:`, error);
+          }
+        }
+        
+        // Sort by date (newest first)
+        allEmails.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        
+        setEmails(allEmails);
+        setFilteredEmails(allEmails);
+      } else {
+        // Load emails from specific account
+        const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
+        
+        let url = `${baseUrl}/emails`;
+        const params = new URLSearchParams();
+        if (type === "gmail" && accountId) {
+          params.append("account_id", accountId);
+          if (folderId) {
+            params.append("label_id", folderId);
+          }
+        } else if (type === "microsoft" && folderId) {
+          params.append("folder_id", folderId);
+        }
+        if (params.toString()) {
+          url += `?${params.toString()}`;
+        }
+        
+        const response = await fetch(`http://127.0.0.1:8080${url}`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+          },
+        });
+        const data = await response.json();
+        const emailsWithSource = (data.emails || []).map((email: Email) => ({
+          ...email,
+          account_type: type,
+          account_email: data.account_email || allAccounts.find(acc => acc.id === accountId)?.email,
+        }));
+        setEmails(emailsWithSource);
+        setFilteredEmails(emailsWithSource);
       }
-      
-      const response = await fetch(`http://127.0.0.1:8080${url}`, {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
-        },
-      });
-      const data = await response.json();
-      setEmails(data.emails || []);
-      setFilteredEmails(data.emails || []);
     } catch (error) {
       toast.error("Fehler beim Laden der E-Mails");
     } finally {
@@ -210,14 +334,18 @@ export const EmailsPage = () => {
     }
   };
 
-  const loadEmailDetails = async (emailId: string) => {
+  const loadEmailDetails = async (emailId: string, accountType?: "gmail" | "microsoft", accountId?: string) => {
     try {
-      const type = selectedAccountType || "gmail";
+      // Find email in current list to get account info
+      const email = emails.find(e => e.id === emailId);
+      const type = accountType || email?.account_type || selectedAccountType || "gmail";
+      const accId = accountId || email?.account_type === "gmail" ? selectedAccountId : undefined;
+      
       const baseUrl = type === "microsoft" ? "/api/microsoft-mail" : "/api/gmail";
       
       let url = `${baseUrl}/emails/${emailId}`;
-      if (type === "gmail" && selectedAccountId) {
-        url += `?account_id=${selectedAccountId}`;
+      if (type === "gmail" && accId) {
+        url += `?account_id=${accId}`;
       }
       
       const response = await fetch(`http://127.0.0.1:8080${url}`, {
@@ -229,7 +357,7 @@ export const EmailsPage = () => {
       setSelectedEmail(data);
       
       if (!data.is_read) {
-        await fetch(`http://127.0.0.1:8080${baseUrl}/emails/${emailId}/mark-read`, {
+        await fetch(`http://127.0.0.1:8080${baseUrl}/emails/${emailId}/mark-read${type === "gmail" && accId ? `?account_id=${accId}` : ""}`, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
@@ -486,67 +614,135 @@ export const EmailsPage = () => {
         {/* Navigation */}
         <ScrollArea className="flex-1">
           <nav className="px-2 space-y-0.5">
-            <button className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 font-medium">
+            <button 
+              onClick={() => {
+                setSelectedFolder(null);
+                if (selectedAccountType === "all") {
+                  loadEmails(undefined, "all");
+                } else {
+                  loadEmails(selectedAccountId || undefined, selectedAccountType || undefined);
+                }
+              }}
+              className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs ${
+                selectedFolder === null 
+                  ? "bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 font-medium" 
+                  : "text-muted-foreground hover:bg-muted"
+              }`}
+            >
               <div className="flex items-center gap-2">
                 <InboxIcon className="h-4 w-4" />
                 <span>Posteingang</span>
               </div>
-              {unreadCount > 0 && (
+              {unreadCount > 0 && selectedFolder === null && (
                 <span className="text-[10px] bg-teal-600 text-white px-1.5 py-0.5 rounded">{unreadCount}</span>
               )}
             </button>
             
-            <button className="w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
-              <div className="flex items-center gap-2">
-                <StarIcon className="h-4 w-4" />
-                <span>Markiert</span>
-              </div>
-            </button>
+            {/* Gmail Labels / Microsoft Folders */}
+            {selectedAccountType === "gmail" && gmailLabels.length > 0 && (
+              <>
+                {gmailLabels
+                  .filter(label => ['STARRED', 'SENT', 'DRAFT', 'IMPORTANT'].includes(label.id))
+                  .map((label) => {
+                    const iconMap: Record<string, React.ReactNode> = {
+                      'STARRED': <StarIcon className="h-4 w-4" />,
+                      'SENT': <PaperAirplaneIcon className="h-4 w-4" />,
+                      'DRAFT': <DocumentTextIcon className="h-4 w-4" />,
+                      'IMPORTANT': <ExclamationCircleIcon className="h-4 w-4" />,
+                    };
+                    const nameMap: Record<string, string> = {
+                      'STARRED': 'Markiert',
+                      'SENT': 'Gesendet',
+                      'DRAFT': 'Entwürfe',
+                      'IMPORTANT': 'Wichtig',
+                    };
+                    return (
+                      <button
+                        key={label.id}
+                        onClick={() => {
+                          setSelectedFolder(label.id);
+                          loadEmails(selectedAccountId || undefined, "gmail", label.id);
+                        }}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs ${
+                          selectedFolder === label.id
+                            ? "bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 font-medium"
+                            : "text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {iconMap[label.id] || <TagIcon className="h-4 w-4" />}
+                          <span>{nameMap[label.id] || label.name}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                {gmailLabels
+                  .filter(label => !['INBOX', 'STARRED', 'SENT', 'DRAFT', 'IMPORTANT', 'TRASH', 'SPAM'].includes(label.id))
+                  .map((label) => (
+                    <button
+                      key={label.id}
+                      onClick={() => {
+                        setSelectedFolder(label.id);
+                        loadEmails(selectedAccountId || undefined, "gmail", label.id);
+                      }}
+                      className={`w-full flex items-center gap-2 px-2 py-1 rounded text-xs ${
+                        selectedFolder === label.id
+                          ? "bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 font-medium"
+                          : "text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                      <span>{label.name}</span>
+                    </button>
+                  ))}
+              </>
+            )}
             
-            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
-              <PaperAirplaneIcon className="h-4 w-4" />
-              <span>Gesendet</span>
-            </button>
-            
-            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
-              <DocumentTextIcon className="h-4 w-4" />
-              <span>Entwürfe</span>
-            </button>
-            
-            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
-              <ArchiveBoxIcon className="h-4 w-4" />
-              <span>Archiv</span>
-            </button>
-            
-            <button className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-muted-foreground hover:bg-muted">
-              <TrashIcon className="h-4 w-4" />
-              <span>Papierkorb</span>
-            </button>
+            {selectedAccountType === "microsoft" && microsoftFolders.length > 0 && (
+              <>
+                {microsoftFolders
+                  .filter(folder => ['Inbox', 'Sent Items', 'Drafts', 'Archive', 'Deleted Items'].includes(folder.name))
+                  .map((folder) => {
+                    const iconMap: Record<string, React.ReactNode> = {
+                      'Inbox': <InboxIcon className="h-4 w-4" />,
+                      'Sent Items': <PaperAirplaneIcon className="h-4 w-4" />,
+                      'Drafts': <DocumentTextIcon className="h-4 w-4" />,
+                      'Archive': <ArchiveBoxIcon className="h-4 w-4" />,
+                      'Deleted Items': <TrashIcon className="h-4 w-4" />,
+                    };
+                    const nameMap: Record<string, string> = {
+                      'Inbox': 'Posteingang',
+                      'Sent Items': 'Gesendet',
+                      'Drafts': 'Entwürfe',
+                      'Archive': 'Archiv',
+                      'Deleted Items': 'Papierkorb',
+                    };
+                    return (
+                      <button
+                        key={folder.id}
+                        onClick={() => {
+                          setSelectedFolder(folder.id);
+                          loadEmails(undefined, "microsoft", folder.id);
+                        }}
+                        className={`w-full flex items-center justify-between px-2 py-1.5 rounded-md text-xs ${
+                          selectedFolder === folder.id
+                            ? "bg-teal-50 dark:bg-teal-900/20 text-teal-700 dark:text-teal-400 font-medium"
+                            : "text-muted-foreground hover:bg-muted"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {iconMap[folder.name] || <TagIcon className="h-4 w-4" />}
+                          <span>{nameMap[folder.name] || folder.name}</span>
+                        </div>
+                        {folder.unread_count > 0 && selectedFolder === folder.id && (
+                          <span className="text-[10px] bg-teal-600 text-white px-1.5 py-0.5 rounded">{folder.unread_count}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+              </>
+            )}
           </nav>
-
-          {/* Labels Section */}
-          <div className="px-2 mt-3">
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Labels</span>
-              <button className="p-0.5 hover:bg-muted rounded">
-                <PlusIcon className="h-3 w-3 text-muted-foreground" />
-              </button>
-            </div>
-            <div className="space-y-0.5">
-              <button className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted">
-                <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
-                <span>Kunden</span>
-              </button>
-              <button className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted">
-                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-                <span>Projekte</span>
-              </button>
-              <button className="w-full flex items-center gap-2 px-2 py-1 rounded text-xs text-muted-foreground hover:bg-muted">
-                <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-                <span>Anfragen</span>
-              </button>
-            </div>
-          </div>
         </ScrollArea>
 
         {/* Bottom Actions */}
@@ -570,10 +766,57 @@ export const EmailsPage = () => {
               <h2 className="font-semibold text-sm">Posteingang</h2>
               <ChevronDownIcon className="h-3 w-3 text-muted-foreground" />
             </div>
-            <button onClick={() => loadEmails(selectedAccountId || undefined)} className="p-1 hover:bg-muted rounded" title="Aktualisieren">
+            <button 
+              onClick={() => {
+                if (selectedAccountType === "all") {
+                  loadEmails(undefined, "all");
+                } else {
+                  loadEmails(selectedAccountId || undefined, selectedAccountType || undefined);
+                }
+              }} 
+              className="p-1 hover:bg-muted rounded" 
+              title="Aktualisieren"
+            >
               <ArrowUturnLeftIcon className="h-3.5 w-3.5 text-muted-foreground" />
             </button>
           </div>
+          
+          {/* Account Selector */}
+          <div className="mb-2">
+            <Select
+              value={selectedAccountType === "all" ? "all" : selectedAccountId || ""}
+              onValueChange={(value) => {
+                if (value === "all") {
+                  setSelectedAccountType("all");
+                  setSelectedAccountId(null);
+                  setSelectedFolder(null);
+                  loadEmails(undefined, "all");
+                } else {
+                  const account = allAccounts.find(acc => acc.id === value);
+                  if (account) {
+                    setSelectedAccountId(account.id);
+                    setSelectedAccountType(account.type || "gmail");
+                    setSelectedFolder(null);
+                    loadEmails(account.id, account.type || "gmail");
+                    loadFolders();
+                  }
+                }
+              }}
+            >
+              <SelectTrigger className="h-7 text-xs">
+                <SelectValue placeholder="Konto wählen" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alle Mails</SelectItem>
+                {allAccounts.map((acc) => (
+                  <SelectItem key={acc.id} value={acc.id}>
+                    {acc.email} {acc.type === "microsoft" && "(Microsoft)"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          
           <p className="text-[10px] text-muted-foreground mb-2">{filteredEmails.length} Nachrichten</p>
           <div className="relative">
             <MagnifyingGlassIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -601,8 +844,14 @@ export const EmailsPage = () => {
             <div>
               {filteredEmails.map((email) => (
                 <button
-                  key={email.id}
-                  onClick={() => loadEmailDetails(email.id)}
+                  key={`${email.account_type || "gmail"}-${email.id}`}
+                  onClick={() => {
+                    // Find the account for this email
+                    const account = email.account_type === "microsoft" 
+                      ? microsoftAccounts.find(acc => acc.email === email.account_email)
+                      : gmailAccounts.find(acc => acc.email === email.account_email);
+                    loadEmailDetails(email.id, email.account_type, account?.id);
+                  }}
                   className={`w-full text-left px-3 py-2 hover:bg-muted/50 border-b border-border transition-colors ${
                     selectedEmail?.id === email.id ? "bg-muted" : ""
                   }`}

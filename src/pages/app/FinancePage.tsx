@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Invoice, InvoiceStatus } from "@/types";
 import { invoicesApi, usersApi, paymentsApi, EmployeeCredits, Payment, PaymentSummary, PaymentStatus } from "@/lib/apiClient";
-import { StatCard } from "@/components/StatCard";
+import { StatCard } from "@/components/common";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";

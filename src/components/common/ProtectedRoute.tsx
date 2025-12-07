@@ -62,3 +62,4 @@ export const InternalRoute: React.FC<{ children: React.ReactNode }> = ({ childre
 export const CustomerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <ProtectedRoute allowedRoles={["customer"]}>{children}</ProtectedRoute>
 );
+

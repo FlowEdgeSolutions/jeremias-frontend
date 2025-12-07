@@ -56,30 +56,46 @@ async function fetchApi<T>(
     headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  try {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      ...options,
+      headers,
+    });
 
-  if (!response.ok) {
-    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-    
-    try {
-      const errorData = await response.json();
-      errorMessage = errorData.detail || errorMessage;
-    } catch {
-      // Response is not JSON, use default message
+    if (!response.ok) {
+      let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+      
+      try {
+        const errorData = await response.json();
+        errorMessage = errorData.detail || errorMessage;
+      } catch {
+        // Response is not JSON, use default message
+      }
+
+      throw new ApiError(response.status, errorMessage);
     }
 
-    throw new ApiError(response.status, errorMessage);
-  }
+    // Handle 204 No Content
+    if (response.status === 204) {
+      return null as T;
+    }
 
-  // Handle 204 No Content
-  if (response.status === 204) {
-    return null as T;
+    return response.json();
+  } catch (error) {
+    // Handle network errors
+    if (error instanceof TypeError && error.message === "Failed to fetch") {
+      throw new ApiError(
+        0,
+        `Backend-Server nicht erreichbar. Bitte prüfe, ob der Server unter ${API_BASE_URL} läuft.`
+      );
+    }
+    // Re-throw ApiError as-is
+    if (error instanceof ApiError) {
+      throw error;
+    }
+    // Wrap other errors
+    throw new ApiError(0, error instanceof Error ? error.message : "Unbekannter Fehler");
   }
-
-  return response.json();
 }
 
 // ============================================================================

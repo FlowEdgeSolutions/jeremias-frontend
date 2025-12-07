@@ -153,12 +153,14 @@ export const CustomerDetailPage = () => {
     }
     loadData();
     loadSignatures();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   useEffect(() => {
     if (details?.customer.email) {
       loadCustomerEmails();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [details]);
   
   const loadData = async () => {
@@ -169,42 +171,75 @@ export const CustomerDetailPage = () => {
     try {
       setLoading(true);
       
-      // Timeout für API-Aufrufe
-      const timeout = (ms: number) => new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), ms)
-      );
+      // Load data sequentially to better handle errors
+      let detailsData: CustomerDetails | null = null;
+      let notesData: Note[] = [];
+      let projectsData: Project[] = [];
+      let invoicesData: Invoice[] = [];
       
-      const [detailsData, notesData, projectsData, invoicesData] = await Promise.race([
-        Promise.all([
-          customersApi.getCustomerDetails(id),
-          customersApi.getNotes(id),
-          projectsApi.getProjects({ customer_id: id }),
-          invoicesApi.getInvoices({ customer_id: id }),
-        ]),
-        timeout(10000) // 10 Sekunden Timeout
-      ]) as [CustomerDetails, Note[], Project[], Invoice[]];
-      
-      console.log("Customer details loaded:", detailsData);
-      console.log("Notes loaded:", notesData);
-      console.log("Projects loaded:", projectsData);
-      console.log("Invoices loaded:", invoicesData);
-      
-      // Check if there are unsaved changes in localStorage
-      const savedData = localStorage.getItem(`customer_${id}`);
-      if (savedData) {
-        const parsedData = JSON.parse(savedData);
-        console.log('Found unsaved data in localStorage:', parsedData);
-        detailsData.customer = { ...detailsData.customer, ...parsedData };
+      try {
+        detailsData = await customersApi.getCustomerDetails(id);
+        console.log("Customer details loaded:", detailsData);
+      } catch (error) {
+        console.error("Error loading customer details:", error);
+        const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+        if (message.includes("Failed to fetch") || message.includes("NetworkError")) {
+          toast.error("Backend-Server nicht erreichbar. Bitte prüfe, ob der Server läuft.");
+        } else {
+          toast.error("Fehler beim Laden der Kundendetails: " + message);
+        }
+        setDetails(null);
+        setLoading(false);
+        return;
       }
       
-      setDetails(detailsData);
+      try {
+        notesData = await customersApi.getNotes(id);
+        console.log("Notes loaded:", notesData);
+      } catch (error) {
+        console.error("Error loading notes:", error);
+        // Notes are optional, continue
+      }
+      
+      try {
+        projectsData = await projectsApi.getProjects({ customer_id: id });
+        console.log("Projects loaded:", projectsData);
+      } catch (error) {
+        console.error("Error loading projects:", error);
+        // Projects are optional, continue
+      }
+      
+      try {
+        invoicesData = await invoicesApi.getInvoices({ customer_id: id });
+        console.log("Invoices loaded:", invoicesData);
+      } catch (error) {
+        console.error("Error loading invoices:", error);
+        // Invoices are optional, continue
+      }
+      
+      // Check if there are unsaved changes in localStorage
+      if (detailsData) {
+        const savedData = localStorage.getItem(`customer_${id}`);
+        if (savedData) {
+          const parsedData = JSON.parse(savedData);
+          console.log('Found unsaved data in localStorage:', parsedData);
+          detailsData.customer = { ...detailsData.customer, ...parsedData };
+        }
+        
+        setDetails(detailsData);
+      }
+      
       setNotes(notesData);
       setProjects(projectsData);
       setInvoices(invoicesData);
     } catch (error: unknown) {
       console.error("Error loading customer details:", error);
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler beim Laden: " + message);
+      if (message.includes("Failed to fetch") || message.includes("NetworkError")) {
+        toast.error("Backend-Server nicht erreichbar. Bitte prüfe, ob der Server läuft.");
+      } else {
+        toast.error("Fehler beim Laden: " + message);
+      }
       // Fallback: Leere Daten setzen
       setDetails(null);
       setNotes([]);

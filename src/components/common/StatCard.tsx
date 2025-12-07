@@ -37,3 +37,4 @@ export const StatCard = ({ title, value, icon: Icon, description, trend }: StatC
     </Card>
   );
 };
+

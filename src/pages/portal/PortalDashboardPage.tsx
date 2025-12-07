@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatCard } from "@/components/StatCard";
+import { StatCard } from "@/components/common";
 import { FolderKanban, Receipt, ShoppingCart, TrendingUp, Loader2 } from "lucide-react";
 import { customerPortalApi, CustomerStats } from "@/lib/apiClient";
 

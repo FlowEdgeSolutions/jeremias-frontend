@@ -6,7 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layouts/AppLayout";
 import { PortalLayout } from "@/components/layouts/PortalLayout";
-import { InternalRoute, CustomerRoute } from "@/components/ProtectedRoute";
+import { InternalRoute, CustomerRoute } from "@/components/common";
 
 // App Pages
 import { LeadsPage } from "@/pages/app/LeadsPage";
