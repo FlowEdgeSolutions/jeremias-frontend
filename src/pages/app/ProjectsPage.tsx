@@ -18,6 +18,7 @@ import { toast } from "sonner";
 import { Plus } from "lucide-react";
 
 const statusLabels: Record<ProjectStatus, string> = {
+  NEU: "Neu",
   IN_BEARBEITUNG: "In Bearbeitung",
   REVISION: "Revision",
   FERTIGGESTELLT: "Fertiggestellt",
@@ -25,6 +26,7 @@ const statusLabels: Record<ProjectStatus, string> = {
 };
 
 const statusColors: Record<ProjectStatus, string> = {
+  NEU: "bg-primary text-primary-foreground",
   IN_BEARBEITUNG: "bg-info text-info-foreground",
   REVISION: "bg-warning text-warning-foreground",
   FERTIGGESTELLT: "bg-success text-success-foreground",
@@ -99,6 +101,7 @@ export const ProjectsPage = () => {
   };
 
   const kanbanColumns = [
+    { id: "NEU", title: "Neu", items: filteredProjects.filter(p => p.status === "NEU") },
     { id: "IN_BEARBEITUNG", title: "In Bearbeitung", items: filteredProjects.filter(p => p.status === "IN_BEARBEITUNG") },
     { id: "PROBLEM", title: "Problem", items: filteredProjects.filter(p => p.status === "PROBLEM") },
     { id: "FERTIGGESTELLT", title: "Fertiggestellt", items: filteredProjects.filter(p => p.status === "FERTIGGESTELLT") },

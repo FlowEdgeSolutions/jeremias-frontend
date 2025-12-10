@@ -46,7 +46,7 @@ const paymentStatusColors: Record<PaymentStatus, string> = {
   COMPLETED: "bg-green-500/10 text-green-600 border-green-500/20",
   FAILED: "bg-red-500/10 text-red-600 border-red-500/20",
   REFUNDED: "bg-purple-500/10 text-purple-600 border-purple-500/20",
-  CANCELLED: "bg-gray-500/10 text-gray-600 border-gray-500/20",
+  CANCELLED: "bg-muted text-muted-foreground border-border",
 };
 
 const getRoleBadgeColor = (role: string) => {
@@ -460,7 +460,7 @@ export const FinancePage = () => {
                             <div className="flex items-center gap-3">
                               <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-medium ${
                                 index === 0 ? "bg-yellow-500/20 text-yellow-600" : 
-                                index === 1 ? "bg-gray-300/20 text-gray-600" :
+                                index === 1 ? "bg-muted text-muted-foreground" :
                                 index === 2 ? "bg-amber-600/20 text-amber-700" :
                                 "bg-primary/10 text-primary"
                               }`}>

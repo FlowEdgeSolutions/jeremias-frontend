@@ -743,7 +743,7 @@ export const ProjectDetailPage = () => {
                       </div>
                     </div>
                     
-                    <div className="border rounded-lg p-4 bg-white">
+                    <div className="border rounded-lg p-4 bg-card">
                       <div className="flex items-start gap-3">
                         <Checkbox 
                           id="output-confirm"

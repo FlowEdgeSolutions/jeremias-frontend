@@ -43,7 +43,7 @@ const STAGE_ICONS: Record<PipelineStage, React.ComponentType<{ className?: strin
 };
 
 const STAGE_ICON_COLORS: Record<PipelineStage, string> = {
-  LEAD_LIST: "text-gray-500",
+  LEAD_LIST: "text-muted-foreground",
   FOLLOW_UP: "text-blue-500",
   STAGE: "text-sky-400",
   KUNDE: "text-green-500",

@@ -8,6 +8,7 @@ export type PipelineStage =
   | "BESTANDSKUNDE";
 
 export type ProjectStatus = 
+  | "NEU"
   | "IN_BEARBEITUNG" 
   | "REVISION" 
   | "FERTIGGESTELLT" 
@@ -89,6 +90,7 @@ export interface Invoice {
   id: string;
   customer_id: string;
   project_id?: string;
+  invoice_number?: string;
   amount: number;
   currency?: string;
   status: InvoiceStatus;
@@ -96,6 +98,10 @@ export interface Invoice {
   paid_at?: string;
   created_at: string;
   updated_at?: string;
+  // Stripe Invoice für PDF
+  stripe_invoice_id?: string;
+  stripe_invoice_pdf_url?: string;
+  stripe_hosted_invoice_url?: string;
   // Legacy frontend fields for compatibility
   customerId?: string;
   projectId?: string;
@@ -204,4 +210,42 @@ export interface ProductOption {
   code: string;
   name: string;
   description: string;
+}
+
+// ============= Email Account Types =============
+
+export type EmailProvider = "gmail" | "microsoft";
+
+export type EmailAccountStatus = 
+  | "pending" 
+  | "active" 
+  | "auth_failed" 
+  | "error" 
+  | "disconnected";
+
+export interface EmailAccount {
+  id: string;
+  provider: EmailProvider;
+  email: string | null;
+  display_name: string | null;
+  is_primary: boolean;
+  status: EmailAccountStatus;
+  status_display: string;
+  last_status_check: string | null;
+  last_error: string | null;
+  needs_reauth: boolean;
+  created_at: string;
+}
+
+export interface EmailAccountsListResponse {
+  accounts: EmailAccount[];
+  total_count: number;
+  has_connected_accounts: boolean;
+}
+
+export interface ConnectAccountResponse {
+  auth_url: string;
+  account_id: string;
+  provider: EmailProvider;
+  message: string;
 }

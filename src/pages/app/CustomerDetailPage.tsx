@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X, Download, ExternalLink } from "lucide-react";
 
 const PRODUCT_LABELS: Record<string, string> = {
   "3D_MODELLIERUNG_HUELLE": "3D Modellierung (nur thermische Hülle)",
@@ -91,7 +91,7 @@ interface Signature {
 }
 
 const STAGE_ICON_COLORS: Record<PipelineStage, string> = {
-  LEAD_LIST: "text-gray-500",
+  LEAD_LIST: "text-muted-foreground",
   FOLLOW_UP: "text-blue-500",
   STAGE: "text-sky-400",
   KUNDE: "text-green-500",
@@ -1187,14 +1187,19 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                       <Table>
                         <TableHeader>
                           <TableRow>
+                            <TableHead>Nr.</TableHead>
                             <TableHead>Betrag</TableHead>
                             <TableHead>Status</TableHead>
                             <TableHead>Datum</TableHead>
+                            <TableHead className="text-right">Rechnung</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {invoices.map((invoice) => (
                             <TableRow key={invoice.id}>
+                              <TableCell className="font-mono text-sm">
+                                {invoice.invoice_number || "-"}
+                              </TableCell>
                               <TableCell className="font-medium">
                                 {formatCurrency(invoice.amount)}
                               </TableCell>
@@ -1205,6 +1210,31 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                               </TableCell>
                               <TableCell className="text-sm">
                                 {formatDate(invoice.created_at)}
+                              </TableCell>
+                              <TableCell className="text-right">
+                                {invoice.stripe_invoice_pdf_url ? (
+                                  <div className="flex items-center justify-end gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => window.open(invoice.stripe_invoice_pdf_url, "_blank")}
+                                    >
+                                      <Download className="h-4 w-4 mr-1" />
+                                      PDF
+                                    </Button>
+                                    {invoice.stripe_hosted_invoice_url && (
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => window.open(invoice.stripe_hosted_invoice_url, "_blank")}
+                                      >
+                                        <ExternalLink className="h-4 w-4" />
+                                      </Button>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <span className="text-muted-foreground text-xs">-</span>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1439,7 +1469,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Add New Signature */}
-            <div className="space-y-4 p-4 border rounded-lg bg-gray-50">
+            <div className="space-y-4 p-4 border rounded-lg bg-muted">
               <h3 className="font-semibold">Neue Signatur erstellen</h3>
               <div className="space-y-3">
                 <div className="space-y-2">
@@ -1470,7 +1500,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
             <div className="space-y-3">
               <h3 className="font-semibold">Gespeicherte Signaturen</h3>
               {signatures.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">Noch keine Signaturen vorhanden</p>
+                <p className="text-sm text-muted-foreground text-center py-8">Noch keine Signaturen vorhanden</p>
               ) : (
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
                   {signatures.map((sig) => (
@@ -1484,7 +1514,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                             className="h-8 w-8 p-0"
                             title={sig.isDefault ? "Standard-Signatur" : "Als Standard setzen"}
                           >
-                            <Star className={`h-4 w-4 ${sig.isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-gray-400'}`} />
+                            <Star className={`h-4 w-4 ${sig.isDefault ? 'fill-yellow-400 text-yellow-400' : 'text-muted-foreground'}`} />
                           </Button>
                           <p className="font-medium">{sig.name}</p>
                           {sig.isDefault && (
@@ -1495,7 +1525,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                           <X className="h-4 w-4 text-red-500" />
                         </Button>
                       </div>
-                      <pre className="text-sm text-gray-600 whitespace-pre-wrap font-sans">{sig.content}</pre>
+                      <pre className="text-sm text-muted-foreground whitespace-pre-wrap font-sans">{sig.content}</pre>
                     </div>
                   ))}
                 </div>
