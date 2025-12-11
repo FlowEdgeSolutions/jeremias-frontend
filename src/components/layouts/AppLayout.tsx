@@ -108,7 +108,11 @@ export const AppLayout = () => {
       {/* Header with Toggle */}
       <div className="p-6 border-b border-sidebar-border flex items-center justify-between">
         <div className={`transition-opacity duration-200 ${(isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0" : "opacity-100"}`}>
-          <h1 className="text-xl font-bold text-sidebar-foreground whitespace-nowrap">CRM System</h1>
+          <img 
+            src="/teamnoahLogo.png" 
+            alt="Team Noah Logo" 
+            className="h-8 w-auto dark:invert"
+          />
           <p className="text-sm text-sidebar-foreground/70 mt-1 whitespace-nowrap">
             {isAdmin ? "Admin" : isProjectMember ? "Team" : ""}
           </p>

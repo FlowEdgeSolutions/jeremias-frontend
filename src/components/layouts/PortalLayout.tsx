@@ -72,7 +72,11 @@ export const PortalLayout = () => {
           }`}
         >
           <div className="p-6 border-b border-border flex items-center justify-between">
-            <h1 className="text-xl font-bold text-foreground">Kundenportal</h1>
+            <img 
+              src="/teamnoahLogo.png" 
+              alt="Team Noah Logo" 
+              className="h-8 w-auto dark:invert"
+            />
             <Button
               variant="ghost"
               size="icon"
@@ -125,7 +129,11 @@ export const PortalLayout = () => {
                 <Menu className="h-5 w-5" />
               </Button>
             )}
-            <h1 className="text-lg md:text-xl font-bold text-foreground">Kundenportal</h1>
+            <img 
+              src="/teamnoahLogo.png" 
+              alt="Team Noah Logo" 
+              className="h-8 w-auto dark:invert"
+            />
             
             {!isMobile && (
               <nav className="hidden md:flex items-center gap-1">

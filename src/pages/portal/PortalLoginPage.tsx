@@ -45,8 +45,15 @@ export const PortalLoginPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30">
       <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle className="text-2xl">Kundenportal Login</CardTitle>
+        <CardHeader className="text-center">
+          <div className="flex justify-center mb-4">
+            <img 
+              src="/teamnoahLogo.png" 
+              alt="Team Noah Logo" 
+              className="h-12 w-auto dark:invert"
+            />
+          </div>
+          <CardTitle className="text-2xl">Portal Login</CardTitle>
           <CardDescription>
             Melden Sie sich mit Ihren Zugangsdaten an
           </CardDescription>
