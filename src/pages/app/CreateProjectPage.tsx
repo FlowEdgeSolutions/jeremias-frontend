@@ -593,21 +593,21 @@ export const CreateProjectPage = () => {
                   <SelectTrigger id="product">
                     <SelectValue placeholder="Produkt auswählen..." />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="min-w-[350px]">
                     {productOptions.map((product) => (
-                      <SelectItem key={product.code} value={product.code}>
-                        <div className="flex items-center justify-between w-full group">
-                          <span className="flex-1">{product.name}</span>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <SelectItem key={product.code} value={product.code} className="pr-2">
+                        <div className="flex items-center w-full min-w-[300px] group">
+                          <span className="flex-1 truncate pr-4">{product.name}</span>
+                          <div className="flex gap-1 ml-auto opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                             <Button
                               type="button"
                               variant="ghost"
                               size="sm"
-                              className="h-5 w-5 p-0 text-destructive"
+                              className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
                               onClick={(e) => handleDeleteProduct(product.code, e)}
                               title="Produkt löschen"
                             >
-                              <Trash2 className="h-3 w-3" />
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>
                         </div>
@@ -765,31 +765,31 @@ export const CreateProjectPage = () => {
                               </div>
                             </div>
                           ) : (
-                            <div className="flex items-center justify-between">
-                              <span className="flex-1">{spec.label}</span>
-                              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center w-full">
+                              <span className="flex-1 truncate pr-4">{spec.label}</span>
+                              <div className="flex gap-1 ml-auto opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-6 w-6 p-0"
+                                  className="h-6 w-6 p-0 hover:bg-accent"
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     handleEditSpecification(index, e);
                                   }}
                                   title="Spezifikation bearbeiten"
                                 >
-                                  <Pencil className="h-3 w-3" />
+                                  <Pencil className="h-3.5 w-3.5" />
                                 </Button>
                                 <Button
                                   type="button"
                                   variant="ghost"
                                   size="sm"
-                                  className="h-6 w-6 p-0 text-destructive"
+                                  className="h-6 w-6 p-0 text-destructive hover:bg-destructive/10"
                                   onClick={(e) => handleDeleteSpecification(index, e)}
                                   title="Spezifikation löschen"
                                 >
-                                  <Trash2 className="h-3 w-3" />
+                                  <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
                             </div>

@@ -40,6 +40,7 @@ import {
   StarIcon,
   ChevronRightIcon,
   CommandLineIcon,
+  ArrowPathIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid, EnvelopeIcon as EnvelopeIconSolid } from "@heroicons/react/24/solid";
 
@@ -792,9 +793,20 @@ export const EmailsPage = () => {
                 {filteredEmails.length} {filteredEmails.length === 1 ? 'E-Mail' : 'E-Mails'}
               </p>
             </div>
-            {loading && (
-              <div className="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={() => loadEmails(selectedAccountId || undefined, selectedAccountType || undefined, selectedFolder)}
+                  disabled={loading}
+                  className="h-8 w-8 p-0"
+                >
+                  <ArrowPathIcon className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Aktualisieren</TooltipContent>
+            </Tooltip>
           </div>
 
           {/* Email List */}
@@ -827,17 +839,10 @@ export const EmailsPage = () => {
             )}
           </div>
 
-          {/* Keyboard Hints */}
-          <div className="p-2 border-t border-border bg-secondary/30">
-            <div className="flex items-center justify-center gap-4 text-xs text-muted-foreground">
-              <span><kbd className="kbd">↑↓</kbd> navigieren</span>
-              <span><kbd className="kbd">↵</kbd> öffnen</span>
-            </div>
-          </div>
         </div>
 
         {/* ===== Detail Panel ===== */}
-        <main className="flex-1 flex flex-col bg-background overflow-hidden min-h-0 min-w-0">
+        <main className="flex-1 flex flex-col bg-background overflow-hidden min-h-0 min-w-0 border-r border-border">
           {selectedEmail ? (
             <>
               {/* Toolbar */}
@@ -924,8 +929,14 @@ export const EmailsPage = () => {
                     </div>
 
                     {/* Body */}
-                    <div className="prose prose-sm max-w-none">
+                    <div className="prose prose-sm max-w-none dark:prose-invert bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-lg p-4 border border-border shadow-sm">
                       <div 
+                        className="email-content [&_*]:!max-w-full [&_img]:!max-w-full [&_table]:!max-w-full [&_*]:!box-border"
+                        style={{ 
+                          colorScheme: 'light dark',
+                          wordBreak: 'break-word',
+                          overflowWrap: 'break-word'
+                        }}
                         dangerouslySetInnerHTML={{ 
                           __html: selectedEmail.body_html || selectedEmail.body_text.replace(/\n/g, '<br/>') 
                         }} 

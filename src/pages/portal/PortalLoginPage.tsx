@@ -4,7 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { toast } from "sonner";
 
 export const PortalLoginPage = () => {
@@ -46,17 +46,13 @@ export const PortalLoginPage = () => {
     <div className="min-h-screen flex items-center justify-center bg-muted/30">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <div className="flex justify-center mb-4">
+          <div className="flex justify-center">
             <img 
               src="/teamnoahLogo.png" 
               alt="Team Noah Logo" 
               className="h-12 w-auto dark:invert"
             />
           </div>
-          <CardTitle className="text-2xl">Portal Login</CardTitle>
-          <CardDescription>
-            Melden Sie sich mit Ihren Zugangsdaten an
-          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">

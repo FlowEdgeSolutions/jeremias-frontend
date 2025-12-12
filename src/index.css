@@ -209,4 +209,65 @@ All colors MUST be HSL.
     @apply bg-secondary text-muted-foreground rounded border border-border;
     font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
   }
+
+  /* Email content isolation - prevents HTML email styles from breaking layout */
+  .email-content {
+    all: initial;
+    display: block;
+    font-family: var(--font-body);
+    font-size: 14px;
+    line-height: 1.6;
+    color: inherit;
+  }
+
+  .email-content * {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .email-content img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .email-content table {
+    max-width: 100% !important;
+    width: auto !important;
+  }
+
+  .email-content a {
+    color: hsl(173 80% 40%);
+    text-decoration: underline;
+  }
+
+  .email-content p,
+  .email-content div,
+  .email-content span,
+  .email-content td,
+  .email-content th,
+  .email-content li {
+    color: inherit !important;
+  }
+
+  /* Force readable text in dark mode for emails with white backgrounds */
+  .dark .email-content {
+    color: hsl(210 20% 98%);
+  }
+
+  .dark .email-content [style*="color: white"],
+  .dark .email-content [style*="color:#fff"],
+  .dark .email-content [style*="color: #fff"],
+  .dark .email-content [style*="color:#ffffff"],
+  .dark .email-content [style*="color: #ffffff"] {
+    color: hsl(210 20% 98%) !important;
+  }
+
+  /* Handle light backgrounds in dark mode */
+  .dark .email-content [style*="background-color: white"],
+  .dark .email-content [style*="background:#fff"],
+  .dark .email-content [style*="background-color:#fff"],
+  .dark .email-content [style*="background-color: #ffffff"],
+  .dark .email-content [style*="background-color:#ffffff"] {
+    background-color: hsl(220 13% 14%) !important;
+  }
 }
