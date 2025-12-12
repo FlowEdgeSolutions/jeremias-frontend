@@ -218,6 +218,8 @@ All colors MUST be HSL.
     font-size: 14px;
     line-height: 1.6;
     color: inherit;
+    max-width: 100%;
+    overflow-x: auto;
   }
 
   .email-content * {
@@ -228,11 +230,19 @@ All colors MUST be HSL.
   .email-content img {
     max-width: 100% !important;
     height: auto !important;
+    display: block;
   }
 
   .email-content table {
     max-width: 100% !important;
     width: auto !important;
+    table-layout: fixed;
+  }
+  
+  .email-content td,
+  .email-content th {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
   }
 
   .email-content a {

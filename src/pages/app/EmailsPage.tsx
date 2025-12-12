@@ -929,13 +929,14 @@ export const EmailsPage = () => {
                     </div>
 
                     {/* Body */}
-                    <div className="prose prose-sm max-w-none dark:prose-invert bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-lg p-4 border border-border shadow-sm">
+                    <div className="prose prose-sm max-w-none dark:prose-invert bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-lg p-4 border border-border shadow-sm overflow-hidden">
                       <div 
-                        className="email-content [&_*]:!max-w-full [&_img]:!max-w-full [&_table]:!max-w-full [&_*]:!box-border"
+                        className="email-content [&_*]:!max-w-full [&_img]:!max-w-full [&_img]:!h-auto [&_table]:!max-w-full [&_*]:!box-border overflow-x-auto"
                         style={{ 
                           colorScheme: 'light dark',
                           wordBreak: 'break-word',
-                          overflowWrap: 'break-word'
+                          overflowWrap: 'break-word',
+                          maxWidth: '100%'
                         }}
                         dangerouslySetInnerHTML={{ 
                           __html: selectedEmail.body_html || selectedEmail.body_text.replace(/\n/g, '<br/>') 
