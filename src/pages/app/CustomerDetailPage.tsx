@@ -338,18 +338,23 @@ export const CustomerDetailPage = () => {
     if (selectedEmail) {
       const quotedText = selectedEmail.body_text.split("\n").join("\n> ");
       const defaultSig = signatures.find(s => s.isDefault);
-      const replyBody = `
+      const quotedSection = `
 
 ---
 Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEmail.from_name}:
 > ${quotedText}`;
+      
+      // Signatur kommt VOR dem zitierten Text
+      const replyBody = defaultSig 
+        ? `\n\n${defaultSig.content}${quotedSection}`
+        : quotedSection;
       
       setComposeForm({
         to: selectedEmail.from,
         subject: selectedEmail.subject.startsWith("Re: ") 
           ? selectedEmail.subject 
           : `Re: ${selectedEmail.subject}`,
-        body: defaultSig ? replyBody + "\n\n" + defaultSig.content : replyBody,
+        body: replyBody,
       });
       if (defaultSig) {
         setSelectedSignatureId(defaultSig.id);

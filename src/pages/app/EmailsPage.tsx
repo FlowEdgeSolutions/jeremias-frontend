@@ -19,7 +19,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { toast } from "sonner";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 import * as emailAccountsApi from "@/lib/emailAccountsApi";
-import type { EmailAccount as UnifiedEmailAccount, EmailProvider } from "@/types";
+import { customersApi, projectsApi, usersApi } from "@/lib/apiClient";
+import type { EmailAccount as UnifiedEmailAccount, EmailProvider, Customer, User } from "@/types";
 
 import {
   InboxIcon,
@@ -41,6 +42,8 @@ import {
   ChevronRightIcon,
   CommandLineIcon,
   ArrowPathIcon,
+  FolderPlusIcon,
+  BriefcaseIcon,
 } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid, EnvelopeIcon as EnvelopeIconSolid } from "@heroicons/react/24/solid";
 
@@ -110,9 +113,13 @@ export const EmailsPage = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [showComposeDialog, setShowComposeDialog] = useState(false);
   const [showCreateLeadDialog, setShowCreateLeadDialog] = useState(false);
+  const [showCreateProjectDialog, setShowCreateProjectDialog] = useState(false);
   const [showAccountsDialog, setShowAccountsDialog] = useState(false);
+  const [employees, setEmployees] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [creatingProject, setCreatingProject] = useState(false);
   const [showReplyDialog, setShowReplyDialog] = useState(false);
   const [replyForm, setReplyForm] = useState({ body: "" });
+  const [signatures, setSignatures] = useState<Array<{ id: string; name: string; content: string; isDefault: boolean }>>([]);
   const [allAccounts, setAllAccounts] = useState<EmailAccountLocal[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedAccountType, setSelectedAccountType] = useState<"gmail" | "microsoft" | "all" | null>(null);
@@ -126,13 +133,53 @@ export const EmailsPage = () => {
     segment: "ENDKUNDE",
   });
   
+  // Project creation state
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [projectForm, setProjectForm] = useState({
+    customer_id: "",
+    product_code: "",
+    product_name: "",
+    product_specification: "",
+    net_price: "",
+    assigned_user_id: "",
+    content: "",
+  });
+  
+  // Product options (same as CreateProjectPage)
+  const productOptions = [
+    { code: "HEIZLAST", name: "Heizlast" },
+    { code: "HEIZLAST_HYDRAULISCH", name: "Heizlast, hydraulischer Abgleich" },
+    { code: "ISFP_ERSTELLUNG", name: "iSFP Erstellung" },
+    { code: "INDIVIDUELL", name: "Individuell" },
+  ];
+  
   const emailListRef = useRef<HTMLDivElement>(null);
 
   // ============= Effects =============
 
   useEffect(() => {
     checkConnection();
+    loadCustomersAndUsers();
+    // Load signatures from localStorage
+    const savedSignatures = localStorage.getItem("email_signatures");
+    if (savedSignatures) {
+      setSignatures(JSON.parse(savedSignatures));
+    }
   }, []);
+  
+  const loadCustomersAndUsers = async () => {
+    try {
+      const [customersData, usersData] = await Promise.all([
+        customersApi.getCustomers(),
+        usersApi.getUsers(),
+      ]);
+      setCustomers(customersData);
+      setAllUsers(usersData);
+    } catch (error) {
+      console.error("Error loading customers/users:", error);
+    }
+  };
 
   useEffect(() => {
     if (searchQuery.trim() === "") {
@@ -180,17 +227,16 @@ export const EmailsPage = () => {
       setAllAccounts(activeAccounts);
       setIsConnected(data.has_connected_accounts);
       
+      // Determine which account to use
       const primaryAccount = activeAccounts.find(acc => acc.is_primary);
-      if (primaryAccount) {
-        setSelectedAccountId(primaryAccount.id);
-        setSelectedAccountType(primaryAccount.type || "gmail");
-      } else if (activeAccounts.length > 0) {
-        setSelectedAccountId(activeAccounts[0].id);
-        setSelectedAccountType(activeAccounts[0].type || "gmail");
-      }
+      const accountToUse = primaryAccount || activeAccounts[0];
       
-      if (data.has_connected_accounts) {
-        loadEmails();
+      if (accountToUse) {
+        setSelectedAccountId(accountToUse.id);
+        setSelectedAccountType(accountToUse.type || "gmail");
+        
+        // Load emails with the determined account (don't rely on state which is async)
+        loadEmails(accountToUse.id, accountToUse.type || "gmail", "INBOX");
       }
     } catch (error) {
       console.error("Error checking connection:", error);
@@ -366,13 +412,13 @@ export const EmailsPage = () => {
         case 'c':
           if (!e.metaKey && !e.ctrlKey) {
             e.preventDefault();
-            setShowComposeDialog(true);
+            openComposeDialog();
           }
           break;
         case 'r':
           if (!e.metaKey && !e.ctrlKey && selectedEmail) {
             e.preventDefault();
-            setShowReplyDialog(true);
+            openReplyDialog();
           }
           break;
         case '/':
@@ -474,6 +520,107 @@ export const EmailsPage = () => {
       });
       setShowCreateLeadDialog(true);
     }
+  };
+
+  const prefillProjectFromEmail = () => {
+    if (selectedEmail) {
+      // Try to find existing customer by email
+      const existingCustomer = customers.find(c => 
+        c.email?.toLowerCase() === selectedEmail.from.toLowerCase()
+      );
+      
+      // Extract content from email body for project notes
+      const emailContent = `E-Mail von ${selectedEmail.from_name} (${selectedEmail.from}):\n\nBetreff: ${selectedEmail.subject}\n\n${selectedEmail.body_text || ""}`;
+      
+      setProjectForm({
+        customer_id: existingCustomer?.id || "",
+        product_code: "",
+        product_name: "",
+        product_specification: "",
+        net_price: "",
+        assigned_user_id: "",
+        content: emailContent.substring(0, 2000), // Limit content length
+      });
+      setShowCreateProjectDialog(true);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    if (!projectForm.customer_id || !projectForm.product_code || !projectForm.assigned_user_id) {
+      toast.error("Bitte Kunde, Produkt und Mitarbeiter auswählen");
+      return;
+    }
+    
+    try {
+      setCreatingProject(true);
+      const project = await projectsApi.createProject({
+        customer_id: projectForm.customer_id,
+        product_code: projectForm.product_code,
+        product_name: projectForm.product_name,
+        product_specification: projectForm.product_specification || undefined,
+        net_price: projectForm.net_price || undefined,
+        content: projectForm.content || undefined,
+        assigned_user_id: projectForm.assigned_user_id,
+        send_order_confirmation: false, // Don't auto-send from email context
+      });
+      
+      toast.success(`Projekt ${project.project_number} erfolgreich angelegt!`);
+      setShowCreateProjectDialog(false);
+      setProjectForm({
+        customer_id: "",
+        product_code: "",
+        product_name: "",
+        product_specification: "",
+        net_price: "",
+        assigned_user_id: "",
+        content: "",
+      });
+    } catch (error) {
+      console.error("Error creating project:", error);
+      toast.error("Fehler beim Anlegen des Projekts");
+    } finally {
+      setCreatingProject(false);
+    }
+  };
+
+  const handleProductChange = (productCode: string) => {
+    const product = productOptions.find(p => p.code === productCode);
+    if (product) {
+      setProjectForm({
+        ...projectForm,
+        product_code: productCode,
+        product_name: product.name,
+      });
+    }
+  };
+
+  // ============= Signature Helpers =============
+
+  const getDefaultSignature = () => {
+    return signatures.find(s => s.isDefault);
+  };
+
+  const openComposeDialog = () => {
+    const defaultSig = getDefaultSignature();
+    setComposeForm({
+      to: "",
+      subject: "",
+      body: defaultSig ? `\n\n${defaultSig.content}` : "",
+      accountId: "",
+    });
+    setShowComposeDialog(true);
+  };
+
+  const openReplyDialog = () => {
+    if (!selectedEmail) return;
+    const defaultSig = getDefaultSignature();
+    const quotedText = (selectedEmail.body_text || "").split("\n").join("\n> ");
+    const quotedSection = `\n\n---\nAm ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEmail.from_name}:\n> ${quotedText}`;
+    
+    setReplyForm({
+      body: defaultSig ? `\n\n${defaultSig.content}${quotedSection}` : quotedSection,
+    });
+    setShowReplyDialog(true);
   };
 
   // ============= Helpers =============
@@ -581,7 +728,7 @@ export const EmailsPage = () => {
                 <Button 
                   variant="ghost" 
                   size="sm" 
-                  onClick={() => setShowComposeDialog(true)}
+                  onClick={openComposeDialog}
                   className="gap-2"
                 >
                   <PlusIcon className="w-4 h-4" />
@@ -716,7 +863,7 @@ export const EmailsPage = () => {
 
           {/* Compose Button */}
           <div className="p-3">
-            <Button onClick={() => setShowComposeDialog(true)} className="w-full justify-start gap-2" size="sm">
+            <Button onClick={openComposeDialog} className="w-full justify-start gap-2" size="sm">
               <PlusIcon className="w-4 h-4" />
               Neue E-Mail
               <span className="ml-auto kbd">C</span>
@@ -859,7 +1006,16 @@ export const EmailsPage = () => {
                   
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Button variant="ghost" size="sm" onClick={() => setShowReplyDialog(true)}>
+                      <Button variant="ghost" size="sm" onClick={prefillProjectFromEmail}>
+                        <BriefcaseIcon className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Als Projekt anlegen</TooltipContent>
+                  </Tooltip>
+                  
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="sm" onClick={openReplyDialog}>
                         <ArrowUturnLeftIcon className="w-4 h-4" />
                       </Button>
                     </TooltipTrigger>
@@ -902,46 +1058,45 @@ export const EmailsPage = () => {
               </div>
 
               {/* Email Content */}
-              <div className="flex-1 overflow-y-auto p-6 min-h-0">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 min-h-0 min-w-0 w-full">
                 {loadingDetail ? (
                   <div className="flex items-center justify-center h-32">
                     <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                   </div>
                 ) : (
-                  <div className="max-w-3xl">
+                  <div className="w-full max-w-3xl">
                     {/* Subject */}
-                    <h1 className="text-xl font-semibold mb-4">{selectedEmail.subject || "(Kein Betreff)"}</h1>
+                    <h1 className="text-xl font-semibold mb-4 break-words">{selectedEmail.subject || "(Kein Betreff)"}</h1>
                     
                     {/* Sender Info */}
                     <div className="flex items-start gap-3 mb-6">
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium text-sm flex-shrink-0">
                         {getInitials(selectedEmail.from_name)}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium">{selectedEmail.from_name}</span>
-                          <span className="text-muted-foreground text-sm">&lt;{selectedEmail.from}&gt;</span>
+                      <div className="flex-1 min-w-0 overflow-hidden">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium truncate">{selectedEmail.from_name}</span>
+                          <span className="text-muted-foreground text-sm truncate">&lt;{selectedEmail.from}&gt;</span>
                         </div>
-                        <p className="text-sm text-muted-foreground">
+                        <p className="text-sm text-muted-foreground truncate">
                           an mich · {formatFullDate(selectedEmail.date)}
                         </p>
                       </div>
                     </div>
 
                     {/* Body */}
-                    <div className="prose prose-sm max-w-none dark:prose-invert bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-lg p-4 border border-border shadow-sm overflow-hidden">
+                    <div className="prose prose-sm max-w-full dark:prose-invert bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-lg p-4 border border-border shadow-sm overflow-hidden w-full">
                       <div 
-                        className="email-content [&_*]:!max-w-full [&_img]:!max-w-full [&_img]:!h-auto [&_table]:!max-w-full [&_*]:!box-border overflow-x-auto"
-                        style={{ 
-                          colorScheme: 'light dark',
-                          wordBreak: 'break-word',
-                          overflowWrap: 'break-word',
-                          maxWidth: '100%'
-                        }}
-                        dangerouslySetInnerHTML={{ 
-                          __html: selectedEmail.body_html || selectedEmail.body_text.replace(/\n/g, '<br/>') 
-                        }} 
-                      />
+                        className="email-content-wrapper overflow-x-auto w-full"
+                        style={{ maxWidth: '100%' }}
+                      >
+                        <div 
+                          className="email-content"
+                          dangerouslySetInnerHTML={{ 
+                            __html: selectedEmail.body_html || selectedEmail.body_text.replace(/\n/g, '<br/>') 
+                          }} 
+                        />
+                      </div>
                     </div>
 
                     {/* Attachments */}
@@ -1105,6 +1260,124 @@ export const EmailsPage = () => {
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowCreateLeadDialog(false)}>Abbrechen</Button>
               <Button onClick={handleCreateLead}>Anlegen</Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Project Dialog */}
+      <Dialog open={showCreateProjectDialog} onOpenChange={setShowCreateProjectDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Projekt anlegen aus E-Mail</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            {/* Customer Selection */}
+            <div className="space-y-2">
+              <Label>Kunde *</Label>
+              <Select value={projectForm.customer_id} onValueChange={(v) => setProjectForm({...projectForm, customer_id: v})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Kunde auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map(customer => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      <div className="flex flex-col">
+                        <span>{customer.name}</span>
+                        {customer.company_name && (
+                          <span className="text-xs text-muted-foreground">{customer.company_name}</span>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!projectForm.customer_id && selectedEmail && (
+                <p className="text-xs text-amber-600">
+                  Kein Kunde mit E-Mail "{selectedEmail.from}" gefunden. Bitte erst Lead anlegen.
+                </p>
+              )}
+            </div>
+            
+            {/* Product Selection */}
+            <div className="space-y-2">
+              <Label>Produkt *</Label>
+              <Select value={projectForm.product_code} onValueChange={handleProductChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Produkt auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {productOptions.map(product => (
+                    <SelectItem key={product.code} value={product.code}>
+                      {product.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Specification */}
+            <div className="space-y-2">
+              <Label>Spezifikation</Label>
+              <Input 
+                value={projectForm.product_specification} 
+                onChange={(e) => setProjectForm({...projectForm, product_specification: e.target.value})}
+                placeholder="z.B. 1-2 Wohneinheiten"
+              />
+            </div>
+            
+            {/* Price */}
+            <div className="space-y-2">
+              <Label>Netto Preis (€)</Label>
+              <Input 
+                type="number"
+                step="0.01"
+                value={projectForm.net_price} 
+                onChange={(e) => setProjectForm({...projectForm, net_price: e.target.value})}
+                placeholder="0.00"
+              />
+            </div>
+            
+            {/* Employee Selection */}
+            <div className="space-y-2">
+              <Label>Mitarbeiter *</Label>
+              <Select value={projectForm.assigned_user_id} onValueChange={(v) => setProjectForm({...projectForm, assigned_user_id: v})}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Mitarbeiter auswählen..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {allUsers.map(user => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex flex-col">
+                        <span>{user.name}</span>
+                        <span className="text-xs text-muted-foreground">{user.email}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Content from Email */}
+            <div className="space-y-2">
+              <Label>Inhalt aus E-Mail</Label>
+              <textarea 
+                value={projectForm.content} 
+                onChange={(e) => setProjectForm({...projectForm, content: e.target.value})}
+                className="w-full min-h-[100px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary bg-background text-sm"
+              />
+            </div>
+            
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setShowCreateProjectDialog(false)}>
+                Abbrechen
+              </Button>
+              <Button 
+                onClick={handleCreateProject} 
+                disabled={creatingProject || !projectForm.customer_id || !projectForm.product_code || !projectForm.assigned_user_id}
+              >
+                {creatingProject ? "Wird angelegt..." : "Projekt anlegen"}
+              </Button>
             </div>
           </div>
         </DialogContent>
