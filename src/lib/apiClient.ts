@@ -375,6 +375,7 @@ export interface ProjectUpdateRequest {
   files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
   customer_notes?: string;
   internal_notes?: string;
+  additional_email?: string;
   deadline?: string;
   payload?: Record<string, unknown>;
 }
