@@ -447,13 +447,37 @@ export const ProjectDetailPage = () => {
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const response = await fetch('http://127.0.0.1:8080/api/transcribe-note', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/transcribe-note`, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('Transkription fehlgeschlagen');
+        // R4.x: Verbesserte Fehlerbehandlung mit strukturierten Fehlermeldungen
+        const errorData = await response.json().catch(() => null);
+        let errorMessage = "Transkription fehlgeschlagen";
+        let retryAllowed = true;
+        
+        if (errorData?.detail) {
+          if (typeof errorData.detail === 'object') {
+            errorMessage = errorData.detail.message || errorMessage;
+            retryAllowed = errorData.detail.retry_allowed !== false;
+          } else {
+            errorMessage = errorData.detail;
+          }
+        }
+        
+        if (retryAllowed) {
+          toast.error(errorMessage, {
+            action: {
+              label: "Erneut versuchen",
+              onClick: () => transcribeAudio(audioBlob, fieldType),
+            },
+          });
+        } else {
+          toast.error(errorMessage);
+        }
+        return;
       }
 
       const data = await response.json();

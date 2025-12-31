@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { customersApi, projectsApi, invoicesApi } from "@/lib/apiClient";
+import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 import { CustomerDetails, Note, Project, Invoice, Segment, PipelineStage } from "@/types";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -143,6 +144,7 @@ export const CustomerDetailPage = () => {
     body: "",
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [showComposeBox, setShowComposeBox] = useState(false);
   
   useEffect(() => {
     console.log("CustomerDetailPage mounted, ID:", id);
@@ -300,30 +302,36 @@ export const CustomerDetailPage = () => {
     if (!details?.customer.email) return;
     
     try {
-      const response = await fetch("http://127.0.0.1:8080/api/gmail/emails", {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
-        },
-      });
+      // Use the dedicated customer-emails API endpoint for server-side filtering
+      const response = await fetch(
+        `${API_CONFIG.BASE_URL}/gmail/customer-emails?email=${encodeURIComponent(details.customer.email)}`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
+          },
+        }
+      );
       
-      if (!response.ok) return;
+      if (!response.ok) {
+        // Fallback: If customer-emails endpoint fails, silently handle it
+        console.log("Customer emails API not available or no Gmail connected");
+        setCustomerEmails([]);
+        return;
+      }
       
       const data = await response.json();
-      // Filter emails by customer email
-      const filtered = data.emails.filter((email: EmailDetail) => 
-        email.from === details.customer.email || email.to === details.customer.email
-      );
-      setCustomerEmails(filtered);
+      setCustomerEmails(data.emails || []);
     } catch (error) {
       console.error("Error loading customer emails:", error);
+      setCustomerEmails([]);
     }
   };
 
   const loadEmailDetails = async (emailId: string) => {
     try {
-      const response = await fetch(`http://127.0.0.1:8080/api/gmail/emails/${emailId}`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/emails/${emailId}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+          Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
         },
       });
       const data = await response.json();
@@ -363,6 +371,22 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
     }
   };
 
+  // R2.x: Open compose email dialog with customer email pre-filled
+  const openComposeEmail = () => {
+    const defaultSig = signatures.find(s => s.isDefault);
+    setComposeForm({
+      to: details?.customer.email || "",
+      subject: "",
+      body: defaultSig ? `\n\n${defaultSig.content}` : "",
+    });
+    if (defaultSig) {
+      setSelectedSignatureId(defaultSig.id);
+    }
+    setExpandedEmailId(null);
+    setShowReplyBox(false);
+    setShowComposeBox(true);
+  };
+
   const insertSignature = () => {
     if (!selectedSignatureId) return;
     
@@ -382,11 +406,11 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         return;
       }
 
-      const response = await fetch("http://127.0.0.1:8080/api/gmail/send", {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("jeremia_token")}`,
+          Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
         },
         body: JSON.stringify({
           to: composeForm.to,
@@ -401,6 +425,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
 
       toast.success("E-Mail erfolgreich gesendet!");
       setShowReplyBox(false);
+      setShowComposeBox(false);
       setComposeForm({
         to: "",
         subject: "",
@@ -497,13 +522,37 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const response = await fetch('http://127.0.0.1:8080/api/transcribe-note', {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/transcribe-note`, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        throw new Error('Transkription fehlgeschlagen');
+        // R4.x: Verbesserte Fehlerbehandlung mit strukturierten Fehlermeldungen
+        const errorData = await response.json().catch(() => null);
+        let errorMessage = "Transkription fehlgeschlagen";
+        let retryAllowed = true;
+        
+        if (errorData?.detail) {
+          if (typeof errorData.detail === 'object') {
+            errorMessage = errorData.detail.message || errorMessage;
+            retryAllowed = errorData.detail.retry_allowed !== false;
+          } else {
+            errorMessage = errorData.detail;
+          }
+        }
+        
+        if (retryAllowed) {
+          toast.error(errorMessage, {
+            action: {
+              label: "Erneut versuchen",
+              onClick: () => transcribeAudio(audioBlob),
+            },
+          });
+        } else {
+          toast.error(errorMessage);
+        }
+        return;
       }
 
       const data = await response.json();
@@ -511,7 +560,12 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       toast.success("Transkription abgeschlossen");
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler bei der Transkription: " + message);
+      toast.error("Fehler bei der Transkription: " + message, {
+        action: {
+          label: "Erneut versuchen",
+          onClick: () => transcribeAudio(audioBlob),
+        },
+      });
     }
   };
   
@@ -1297,10 +1351,101 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
             {/* E-Mails Tab - Liste mit expandierbaren Emails */}
             <TabsContent value="emails" className="mt-4">
               <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">E-Mails von {details.customer.name}</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg">E-Mails von {details.customer.name}</CardTitle>
+                    {details.customer.email && (
+                      <p className="text-sm text-muted-foreground mt-1">{details.customer.email}</p>
+                    )}
+                  </div>
+                  <Button 
+                    onClick={openComposeEmail} 
+                    className="gap-2"
+                    disabled={!details.customer.email}
+                  >
+                    <Mail className="h-4 w-4" />
+                    E-Mail schreiben
+                  </Button>
                 </CardHeader>
                 <CardContent>
+                  {/* Compose Box - R2.x: E-Mail schreiben ohne vorhandenen Verlauf */}
+                  {showComposeBox && (
+                    <div className="mb-4 p-4 border rounded-lg bg-muted/20">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold">Neue E-Mail verfassen</h4>
+                        <Button onClick={() => setShowComposeBox(false)} variant="ghost" size="sm">
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        <div className="space-y-2">
+                          <Label className="text-xs">An</Label>
+                          <Input
+                            type="email"
+                            value={composeForm.to}
+                            onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
+                            className="h-8 text-sm"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Betreff</Label>
+                          <Input
+                            value={composeForm.subject}
+                            onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
+                            className="h-8 text-sm"
+                            placeholder="Betreff eingeben..."
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Nachricht</Label>
+                          <textarea
+                            className="w-full min-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                            value={composeForm.body}
+                            onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
+                            placeholder="Ihre Nachricht..."
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Signatur</Label>
+                          <div className="flex gap-2">
+                            <Select value={selectedSignatureId} onValueChange={setSelectedSignatureId}>
+                              <SelectTrigger className="flex-1 h-8 text-sm">
+                                <SelectValue placeholder="Signatur wählen" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {signatures.map((sig) => (
+                                  <SelectItem key={sig.id} value={sig.id}>
+                                    {sig.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button onClick={insertSignature} variant="outline" size="sm" disabled={!selectedSignatureId}>
+                              Einfügen
+                            </Button>
+                            <Button onClick={() => setShowSignatureDialog(true)} variant="outline" size="sm">
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <Button onClick={() => setShowComposeBox(false)} variant="outline" size="sm" className="flex-1">
+                            Abbrechen
+                          </Button>
+                          <Button onClick={handleSendEmail} size="sm" className="flex-1 bg-emerald-500 hover:bg-emerald-600">
+                            <Mail className="h-4 w-4 mr-2" />
+                            Senden
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-3 max-h-[600px] overflow-y-auto">
                     {customerEmails.length > 0 ? (
                       customerEmails.map((email) => (

@@ -464,7 +464,7 @@ export const CreateProjectPage = () => {
           toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}. Auftragsbestätigung wurde an den Kunden gesendet.`);
         } else {
           toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}`);
-          toast.warning("Auftragsbestätigung konnte nicht gesendet werden. Bitte prüfen Sie die Gmail-Verbindung.");
+          toast.warning("Auftragsbestätigung konnte nicht gesendet werden. Bitte prüfen Sie die E-Mail-Konfiguration (MICROSOFT_FROM_EMAIL in .env setzen).");
         }
       } else {
         toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}`);
