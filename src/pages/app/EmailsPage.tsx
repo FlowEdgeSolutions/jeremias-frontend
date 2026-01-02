@@ -453,7 +453,7 @@ export const EmailsPage = () => {
       return;
     }
     try {
-      await fetch(`${API_CONFIG.BASE_URL}/gmail/send`, {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -466,12 +466,20 @@ export const EmailsPage = () => {
           account_id: composeForm.accountId || selectedAccountId,
         }),
       });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || "Fehler beim Senden der E-Mail";
+        throw new Error(errorMessage);
+      }
+      
       toast.success("E-Mail gesendet");
       setShowComposeDialog(false);
       setComposeForm({ to: "", subject: "", body: "", accountId: "" });
       loadEmails();
     } catch (error) {
-      toast.error("Fehler beim Senden");
+      const message = error instanceof Error ? error.message : "Fehler beim Senden";
+      toast.error(message);
     }
   };
 

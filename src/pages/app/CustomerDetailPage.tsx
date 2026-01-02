@@ -302,9 +302,9 @@ export const CustomerDetailPage = () => {
     if (!details?.customer.email) return;
     
     try {
-      // Use the dedicated customer-emails API endpoint for server-side filtering
+      // Use Microsoft endpoint for vaillant@team-noah.de
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}/gmail/customer-emails?email=${encodeURIComponent(details.customer.email)}`,
+        `${API_CONFIG.BASE_URL}/microsoft/customer-emails?email=${encodeURIComponent(details.customer.email)}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
@@ -314,7 +314,7 @@ export const CustomerDetailPage = () => {
       
       if (!response.ok) {
         // Fallback: If customer-emails endpoint fails, silently handle it
-        console.log("Customer emails API not available or no Gmail connected");
+        console.log("Customer emails API not available or no Microsoft account connected");
         setCustomerEmails([]);
         return;
       }
@@ -406,7 +406,8 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         return;
       }
 
-      const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/send`, {
+      // Use Microsoft endpoint for vaillant@team-noah.de
+      const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -420,7 +421,9 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       });
 
       if (!response.ok) {
-        throw new Error("Fehler beim Senden");
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || "Fehler beim Senden der E-Mail";
+        throw new Error(errorMessage);
       }
 
       toast.success("E-Mail erfolgreich gesendet!");
@@ -433,7 +436,8 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       });
       loadCustomerEmails();
     } catch (error) {
-      toast.error("Fehler beim Senden der E-Mail");
+      const message = error instanceof Error ? error.message : "Fehler beim Senden der E-Mail";
+      toast.error(message);
       console.error(error);
     }
   };

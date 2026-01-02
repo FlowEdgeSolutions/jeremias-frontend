@@ -175,13 +175,14 @@ export const ProjectDetailPage = () => {
     try {
       setLoadingEmails(true);
       
-      // Load emails from all provided addresses
+      // Load emails from all provided addresses using Microsoft endpoint
       const allEmails: EmailMessage[] = [];
       
       for (const email of emails) {
         if (!email) continue;
         
-        const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/customer-emails?email=${encodeURIComponent(email)}`, {
+        // Use Microsoft endpoint for vaillant@team-noah.de
+        const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft/customer-emails?email=${encodeURIComponent(email)}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
           },
@@ -237,7 +238,8 @@ export const ProjectDetailPage = () => {
     
     try {
       setSendingEmail(true);
-      const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/send`, {
+      // Use Microsoft endpoint for vaillant@team-noah.de
+      const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -251,7 +253,9 @@ export const ProjectDetailPage = () => {
       });
       
       if (!response.ok) {
-        throw new Error("Fehler beim Senden");
+        const errorData = await response.json().catch(() => ({}));
+        const errorMessage = errorData.detail || "Fehler beim Senden der E-Mail";
+        throw new Error(errorMessage);
       }
       
       toast.success("E-Mail gesendet!");
@@ -264,7 +268,8 @@ export const ProjectDetailPage = () => {
         loadCustomerEmails(emailsToLoad);
       }
     } catch (error) {
-      toast.error("Fehler beim Senden der E-Mail");
+      const message = error instanceof Error ? error.message : "Fehler beim Senden der E-Mail";
+      toast.error(message);
     } finally {
       setSendingEmail(false);
     }
