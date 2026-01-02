@@ -143,9 +143,11 @@ export const CustomerDetailPage = () => {
     to: "",
     subject: "",
     body: "",
+    accountId: "",
   });
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showComposeBox, setShowComposeBox] = useState(false);
+  const [emailAccounts, setEmailAccounts] = useState<Array<{ id: string; email: string; provider: string; is_primary: boolean }>>([]);
   
   useEffect(() => {
     console.log("CustomerDetailPage mounted, ID:", id);
@@ -156,6 +158,7 @@ export const CustomerDetailPage = () => {
     }
     loadData();
     loadSignatures();
+    loadEmailAccounts();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -260,6 +263,48 @@ export const CustomerDetailPage = () => {
     }
   };
 
+  const loadEmailAccounts = async () => {
+    try {
+      // Try Microsoft accounts first
+      const msResponse = await fetch(`${API_CONFIG.BASE_URL}/microsoft/accounts`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` },
+      });
+      
+      const accounts: Array<{ id: string; email: string; provider: string; is_primary: boolean }> = [];
+      
+      if (msResponse.ok) {
+        const msData = await msResponse.json();
+        accounts.push(...(msData.accounts || []).map((acc: { id: string; email: string; is_primary: boolean }) => ({
+          ...acc,
+          provider: "microsoft"
+        })));
+      }
+      
+      // Try Gmail accounts
+      const gmailResponse = await fetch(`${API_CONFIG.BASE_URL}/gmail/accounts`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` },
+      });
+      
+      if (gmailResponse.ok) {
+        const gmailData = await gmailResponse.json();
+        accounts.push(...(gmailData || []).map((acc: { id: string; email: string; is_primary: boolean }) => ({
+          ...acc,
+          provider: "gmail"
+        })));
+      }
+      
+      setEmailAccounts(accounts);
+      
+      // Set default account
+      const primaryAccount = accounts.find(a => a.is_primary) || accounts[0];
+      if (primaryAccount) {
+        setComposeForm(prev => ({ ...prev, accountId: primaryAccount.id }));
+      }
+    } catch (error) {
+      console.error("Error loading email accounts:", error);
+    }
+  };
+
   const saveSignature = () => {
     if (!newSignature.name.trim() || !newSignature.content.trim()) {
       toast.error("Bitte Name und Signatur ausfüllen");
@@ -358,13 +403,14 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         ? `\n\n${defaultSig.content}${quotedSection}`
         : quotedSection;
       
-      setComposeForm({
+      setComposeForm(prev => ({
+        ...prev,
         to: selectedEmail.from,
         subject: selectedEmail.subject.startsWith("Re: ") 
           ? selectedEmail.subject 
           : `Re: ${selectedEmail.subject}`,
         body: replyBody,
-      });
+      }));
       if (defaultSig) {
         setSelectedSignatureId(defaultSig.id);
       }
@@ -375,11 +421,12 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
   // R2.x: Open compose email dialog with customer email pre-filled
   const openComposeEmail = () => {
     const defaultSig = signatures.find(s => s.isDefault);
-    setComposeForm({
+    setComposeForm(prev => ({
+      ...prev,
       to: details?.customer.email || "",
       subject: "",
       body: defaultSig ? `\n\n${defaultSig.content}` : "",
-    });
+    }));
     if (defaultSig) {
       setSelectedSignatureId(defaultSig.id);
     }
@@ -407,8 +454,12 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         return;
       }
 
-      // Use Microsoft endpoint for vaillant@team-noah.de
-      const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft/send`, {
+      // Determine which endpoint to use based on selected account
+      const selectedAccount = emailAccounts.find(a => a.id === composeForm.accountId);
+      const provider = selectedAccount?.provider || "microsoft";
+      const endpoint = provider === "gmail" ? "gmail/send" : "microsoft/send";
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -418,6 +469,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
           to: composeForm.to,
           subject: composeForm.subject,
           body: composeForm.body,
+          account_id: composeForm.accountId || undefined,
         }),
       });
 
@@ -427,13 +479,15 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         throw new Error(errorMessage);
       }
 
-      toast.success("E-Mail erfolgreich gesendet!");
+      const sentFrom = selectedAccount?.email || "unbekannt";
+      toast.success(`E-Mail erfolgreich gesendet von ${sentFrom}!`);
       setShowReplyBox(false);
       setShowComposeBox(false);
       setComposeForm({
         to: "",
         subject: "",
         body: "",
+        accountId: composeForm.accountId, // Keep selected account
       });
       loadCustomerEmails();
     } catch (error) {
@@ -1384,6 +1438,32 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                       </div>
                       
                       <div className="space-y-3">
+                        {/* Account-Auswahl */}
+                        {emailAccounts.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-xs">Senden von</Label>
+                            <Select 
+                              value={composeForm.accountId} 
+                              onValueChange={(value) => setComposeForm({ ...composeForm, accountId: value })}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="E-Mail-Konto wählen" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {emailAccounts.map((acc) => (
+                                  <SelectItem key={acc.id} value={acc.id}>
+                                    <span className="flex items-center gap-2">
+                                      <Mail className="h-3 w-3" />
+                                      {acc.email}
+                                      {acc.is_primary && <Badge variant="secondary" className="text-[10px] ml-1">Standard</Badge>}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
                         <div className="space-y-2">
                           <Label className="text-xs">An</Label>
                           <Input
@@ -1534,6 +1614,32 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                                       Abbrechen
                                     </Button>
                                   </div>
+
+                                  {/* Account-Auswahl */}
+                                  {emailAccounts.length > 0 && (
+                                    <div className="space-y-2">
+                                      <Label className="text-xs">Senden von</Label>
+                                      <Select 
+                                        value={composeForm.accountId} 
+                                        onValueChange={(value) => setComposeForm({ ...composeForm, accountId: value })}
+                                      >
+                                        <SelectTrigger className="h-8 text-sm">
+                                          <SelectValue placeholder="E-Mail-Konto wählen" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {emailAccounts.map((acc) => (
+                                            <SelectItem key={acc.id} value={acc.id}>
+                                              <span className="flex items-center gap-2">
+                                                <Mail className="h-3 w-3" />
+                                                {acc.email}
+                                                {acc.is_primary && <Badge variant="secondary" className="text-[10px] ml-1">Standard</Badge>}
+                                              </span>
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  )}
 
                                   <div className="space-y-2">
                                     <Label className="text-xs">An</Label>
