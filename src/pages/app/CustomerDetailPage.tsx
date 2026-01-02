@@ -1485,11 +1485,10 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                         </div>
 
                         <div className="space-y-2">
-                          <Label className="text-xs">Nachricht</Label>
-                          <textarea
-                            className="w-full min-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            value={composeForm.body}
-                            onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
+                          <Label className="text-xs">Nachricht (mit Formatierung)</Label>
+                          <RichTextEditor
+                            content={composeForm.body}
+                            onChange={(html) => setComposeForm(prev => ({ ...prev, body: html }))}
                             placeholder="Ihre Nachricht..."
                           />
                         </div>
@@ -1661,11 +1660,10 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                                   </div>
 
                                   <div className="space-y-2">
-                                    <Label className="text-xs">Nachricht</Label>
-                                    <textarea
-                                      className="w-full min-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                      value={composeForm.body}
-                                      onChange={(e) => setComposeForm({ ...composeForm, body: e.target.value })}
+                                    <Label className="text-xs">Nachricht (mit Formatierung)</Label>
+                                    <RichTextEditor
+                                      content={composeForm.body}
+                                      onChange={(html) => setComposeForm(prev => ({ ...prev, body: html }))}
                                       placeholder="Deine Nachricht..."
                                     />
                                   </div>
