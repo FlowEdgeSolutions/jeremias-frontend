@@ -17,6 +17,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X, Download, ExternalLink } from "lucide-react";
+import { RichTextEditor } from "@/components/common/RichTextEditor";
 
 const PRODUCT_LABELS: Record<string, string> = {
   "3D_MODELLIERUNG_HUELLE": "3D Modellierung (nur thermische Hülle)",
@@ -1617,9 +1618,12 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
 
       {/* Signature Management Dialog */}
       <Dialog open={showSignatureDialog} onOpenChange={setShowSignatureDialog}>
-        <DialogContent className="sm:max-w-2xl">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Signaturen verwalten</DialogTitle>
+            <DialogDescription>
+              Erstelle formatierte Signaturen mit Bildern, Links und Textformatierung.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-6 py-4">
             {/* Add New Signature */}
@@ -1635,12 +1639,11 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Signatur *</Label>
-                  <textarea
-                    value={newSignature.content}
-                    onChange={(e) => setNewSignature({ ...newSignature, content: e.target.value })}
-                    placeholder="Mit freundlichen Grüßen,\nMax Mustermann\nTelefon: +49 123 456789"
-                    className="w-full min-h-[120px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  <Label>Signatur * (mit Formatierung und Bildern)</Label>
+                  <RichTextEditor
+                    content={newSignature.content}
+                    onChange={(html) => setNewSignature({ ...newSignature, content: html })}
+                    placeholder="Mit freundlichen Grüßen,&#10;Max Mustermann&#10;Telefon: +49 123 456789"
                   />
                 </div>
                 <Button onClick={saveSignature} className="w-full bg-emerald-500 hover:bg-emerald-600">
@@ -1679,7 +1682,11 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                           <X className="h-4 w-4 text-red-500" />
                         </Button>
                       </div>
-                      <pre className="text-sm text-muted-foreground whitespace-pre-wrap font-sans">{sig.content}</pre>
+                      {/* Render HTML signature preview */}
+                      <div 
+                        className="text-sm text-muted-foreground prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: sig.content }}
+                      />
                     </div>
                   ))}
                 </div>
