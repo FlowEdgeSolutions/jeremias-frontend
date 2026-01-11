@@ -357,6 +357,11 @@ export interface ProjectCreateRequest {
   files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
   customer_notes?: string;
   internal_notes?: string;
+  // Objektadresse
+  project_street?: string;
+  project_zip_code?: string;
+  project_city?: string;
+  project_country?: string;
   payload?: Record<string, unknown>;
   assigned_user_id: string;  // Required: Employee to assign
   send_order_confirmation?: boolean;  // Whether to send order confirmation email (default: true)
@@ -377,6 +382,11 @@ export interface ProjectUpdateRequest {
   internal_notes?: string;
   additional_email?: string;
   deadline?: string;
+  // Objektadresse
+  project_street?: string;
+  project_zip_code?: string;
+  project_city?: string;
+  project_country?: string;
   payload?: Record<string, unknown>;
 }
 

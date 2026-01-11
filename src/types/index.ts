@@ -70,6 +70,12 @@ export interface Project {
   customer_notes?: string;
   internal_notes?: string;
   deadline?: string;
+  additional_email?: string;
+  // Objektadresse
+  project_street?: string;
+  project_zip_code?: string;
+  project_city?: string;
+  project_country?: string;
   payload?: Record<string, unknown>;
   order_confirmation_sent?: boolean;
   order_confirmation_sent_at?: string;

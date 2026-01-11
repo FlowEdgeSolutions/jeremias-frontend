@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Upload, X, Mail, Pencil, ChevronDown, Trash2 } from "lucide-react";
+import { formatProjectName } from "@/lib/projectName";
 
 // Default product options
 const DEFAULT_PRODUCT_OPTIONS = [
@@ -98,6 +99,11 @@ export const CreateProjectPage = () => {
     credits: "",
     content: "",
     assigned_user_id: "",
+    // Objektadresse
+    project_street: "",
+    project_zip_code: "",
+    project_city: "",
+    project_country: "Deutschland",
   });
   const [sendOrderConfirmation, setSendOrderConfirmation] = useState(true);
   
@@ -445,10 +451,16 @@ export const CreateProjectPage = () => {
 
     try {
       setLoading(true);
+      const projectName = formatProjectName({
+        productName: formData.product_name || formData.product_code,
+        street: formData.project_street,
+        zipCode: formData.project_zip_code,
+        city: formData.project_city,
+      });
       const project = await projectsApi.createProject({
         customer_id: formData.customer_id,
         product_code: formData.product_code,
-        product_name: formData.product_name,
+        product_name: projectName,
         product_specification: formData.product_specification || undefined,
         net_price: formData.net_price || undefined,
         processing_days: formData.processing_days ? parseInt(formData.processing_days) : undefined,
@@ -456,6 +468,11 @@ export const CreateProjectPage = () => {
         content: formData.content || undefined,
         assigned_user_id: formData.assigned_user_id,
         send_order_confirmation: sendOrderConfirmation,
+        // Objektadresse
+        project_street: formData.project_street || undefined,
+        project_zip_code: formData.project_zip_code || undefined,
+        project_city: formData.project_city || undefined,
+        project_country: formData.project_country || undefined,
       });
       
       // Show success message with order confirmation status
@@ -464,7 +481,7 @@ export const CreateProjectPage = () => {
           toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}. Auftragsbestätigung wurde an den Kunden gesendet.`);
         } else {
           toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}`);
-          toast.warning("Auftragsbestätigung konnte nicht gesendet werden. Bitte prüfen Sie die E-Mail-Konfiguration (MICROSOFT_FROM_EMAIL in .env setzen).");
+          toast.warning("Auftragsbestätigung konnte nicht gesendet werden. Bitte stellen Sie sicher, dass Sie ein Microsoft-Konto unter E-Mails verbunden haben.");
         }
       } else {
         toast.success(`Projekt erfolgreich angelegt! Projektnummer: ${project.project_number}`);
@@ -893,6 +910,52 @@ export const CreateProjectPage = () => {
                   Credits können manuell eingegeben werden
                 </p>
               )}
+            </div>
+
+            {/* Objektadresse */}
+            <div className="space-y-4 rounded-lg border p-4 bg-muted/20">
+              <h3 className="font-medium text-sm text-muted-foreground">Objektadresse</h3>
+              
+              <div className="space-y-2">
+                <Label htmlFor="project_street">Straße + Hausnummer</Label>
+                <Input
+                  id="project_street"
+                  value={formData.project_street}
+                  onChange={(e) => setFormData({ ...formData, project_street: e.target.value })}
+                  placeholder="z.B. Musterstraße 123"
+                />
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="project_zip_code">PLZ</Label>
+                  <Input
+                    id="project_zip_code"
+                    value={formData.project_zip_code}
+                    onChange={(e) => setFormData({ ...formData, project_zip_code: e.target.value })}
+                    placeholder="12345"
+                  />
+                </div>
+                <div className="space-y-2 col-span-2">
+                  <Label htmlFor="project_city">Stadt</Label>
+                  <Input
+                    id="project_city"
+                    value={formData.project_city}
+                    onChange={(e) => setFormData({ ...formData, project_city: e.target.value })}
+                    placeholder="z.B. Berlin"
+                  />
+                </div>
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="project_country">Land</Label>
+                <Input
+                  id="project_country"
+                  value={formData.project_country}
+                  onChange={(e) => setFormData({ ...formData, project_country: e.target.value })}
+                  placeholder="z.B. Deutschland"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 import * as emailAccountsApi from "@/lib/emailAccountsApi";
 import { customersApi, projectsApi, usersApi } from "@/lib/apiClient";
+import { formatProjectName } from "@/lib/projectName";
 import type { EmailAccount as UnifiedEmailAccount, EmailProvider, Customer, User } from "@/types";
 
 import {
@@ -42,6 +43,7 @@ import {
   ChevronRightIcon,
   CommandLineIcon,
   ArrowPathIcon,
+  ArrowDownTrayIcon,
   FolderPlusIcon,
   BriefcaseIcon,
 } from "@heroicons/react/24/outline";
@@ -99,6 +101,14 @@ interface EmailAccountLocal {
   needs_reauth?: boolean;
 }
 
+interface EmailAttachment {
+  id: string;
+  filename: string;
+  data: string;  // Base64 encoded
+  content_type: string;
+  size: number;
+}
+
 // ============= Component =============
 
 export const EmailsPage = () => {
@@ -125,6 +135,8 @@ export const EmailsPage = () => {
   const [selectedAccountType, setSelectedAccountType] = useState<"gmail" | "microsoft" | "all" | null>(null);
   const [selectedFolder, setSelectedFolder] = useState<string>("INBOX");
   const [composeForm, setComposeForm] = useState({ to: "", subject: "", body: "", accountId: "" });
+  const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [createForm, setCreateForm] = useState({
     email: "",
     firstName: "",
@@ -144,6 +156,10 @@ export const EmailsPage = () => {
     net_price: "",
     assigned_user_id: "",
     content: "",
+    project_street: "",
+    project_zip_code: "",
+    project_city: "",
+    project_country: "Deutschland",
   });
   
   // Product options (same as CreateProjectPage)
@@ -221,15 +237,17 @@ export const EmailsPage = () => {
       });
       
       const activeAccounts = data.accounts
-        .filter(acc => acc.status === "active")
+        .filter(acc => acc.status === "active" && acc.email && acc.email.trim() !== "")
         .map(convertAccount);
       
       setAllAccounts(activeAccounts);
       setIsConnected(data.has_connected_accounts);
       
-      // Determine which account to use
+      // Determine which account to use - PRIORITIZE Microsoft accounts
+      const microsoftAccounts = activeAccounts.filter(acc => acc.type === "microsoft");
+      const primaryMicrosoft = microsoftAccounts.find(acc => acc.is_primary) || microsoftAccounts[0];
       const primaryAccount = activeAccounts.find(acc => acc.is_primary);
-      const accountToUse = primaryAccount || activeAccounts[0];
+      const accountToUse = primaryMicrosoft || primaryAccount || activeAccounts[0];
       
       if (accountToUse) {
         setSelectedAccountId(accountToUse.id);
@@ -335,6 +353,16 @@ export const EmailsPage = () => {
       toast.success("E-Mail-Konto getrennt");
     } catch (error) {
       toast.error("Fehler beim Trennen");
+    }
+  };
+
+  const setPrimaryAccount = async (accountId: string) => {
+    try {
+      await emailAccountsApi.setPrimaryAccount(accountId);
+      await checkConnection();
+      toast.success("Standard-Absendermail aktualisiert");
+    } catch (error) {
+      toast.error("Fehler beim Setzen der Standard-Mail");
     }
   };
 
@@ -464,6 +492,11 @@ export const EmailsPage = () => {
           subject: composeForm.subject,
           body: composeForm.body,
           account_id: composeForm.accountId || selectedAccountId,
+          attachments: attachments.length > 0 ? attachments.map(a => ({
+            filename: a.filename,
+            data: a.data,
+            content_type: a.content_type,
+          })) : undefined,
         }),
       });
       
@@ -473,9 +506,11 @@ export const EmailsPage = () => {
         throw new Error(errorMessage);
       }
       
-      toast.success("E-Mail gesendet");
+      const attachmentText = attachments.length > 0 ? ` mit ${attachments.length} Anhang/Anhängen` : "";
+      toast.success(`E-Mail gesendet${attachmentText}`);
       setShowComposeDialog(false);
       setComposeForm({ to: "", subject: "", body: "", accountId: "" });
+      setAttachments([]);
       loadEmails();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Fehler beim Senden";
@@ -548,6 +583,10 @@ export const EmailsPage = () => {
         net_price: "",
         assigned_user_id: "",
         content: emailContent.substring(0, 2000), // Limit content length
+        project_street: "",
+        project_zip_code: "",
+        project_city: "",
+        project_country: "Deutschland",
       });
       setShowCreateProjectDialog(true);
     }
@@ -561,15 +600,25 @@ export const EmailsPage = () => {
     
     try {
       setCreatingProject(true);
+      const projectName = formatProjectName({
+        productName: projectForm.product_name || projectForm.product_code,
+        street: projectForm.project_street,
+        zipCode: projectForm.project_zip_code,
+        city: projectForm.project_city,
+      });
       const project = await projectsApi.createProject({
         customer_id: projectForm.customer_id,
         product_code: projectForm.product_code,
-        product_name: projectForm.product_name,
+        product_name: projectName,
         product_specification: projectForm.product_specification || undefined,
         net_price: projectForm.net_price || undefined,
         content: projectForm.content || undefined,
         assigned_user_id: projectForm.assigned_user_id,
         send_order_confirmation: false, // Don't auto-send from email context
+        project_street: projectForm.project_street || undefined,
+        project_zip_code: projectForm.project_zip_code || undefined,
+        project_city: projectForm.project_city || undefined,
+        project_country: projectForm.project_country || undefined,
       });
       
       toast.success(`Projekt ${project.project_number} erfolgreich angelegt!`);
@@ -582,6 +631,10 @@ export const EmailsPage = () => {
         net_price: "",
         assigned_user_id: "",
         content: "",
+        project_street: "",
+        project_zip_code: "",
+        project_city: "",
+        project_country: "Deutschland",
       });
     } catch (error) {
       console.error("Error creating project:", error);
@@ -610,13 +663,102 @@ export const EmailsPage = () => {
 
   const openComposeDialog = () => {
     const defaultSig = getDefaultSignature();
+    // Prioritize Microsoft accounts
+    const microsoftAccounts = allAccounts.filter(acc => acc.type === "microsoft");
+    const primaryMicrosoft = microsoftAccounts.find(acc => acc.is_primary) || microsoftAccounts[0];
+    const primaryAccount = allAccounts.find(acc => acc.is_primary);
+    const accountToUse = primaryMicrosoft || primaryAccount || allAccounts[0];
     setComposeForm({
       to: "",
       subject: "",
       body: defaultSig ? `\n\n${defaultSig.content}` : "",
-      accountId: "",
+      accountId: accountToUse?.id || "",
     });
+    setAttachments([]);
     setShowComposeDialog(true);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      // Max 10MB per file
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} ist zu groß (max. 10MB)`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1]; // Remove data:... prefix
+        setAttachments(prev => [...prev, {
+          id: crypto.randomUUID(),
+          filename: file.name,
+          data: base64,
+          content_type: file.type || 'application/octet-stream',
+          size: file.size,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // Reset input
+    e.target.value = '';
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const downloadAttachment = async (emailId: string, attachmentId: string, filename: string) => {
+    try {
+      // Determine provider based on selected account
+      const provider = selectedAccountType === "microsoft" ? "microsoft" : "gmail";
+      const endpoint = `${API_CONFIG.BASE_URL}/${provider}/emails/${emailId}/attachments/${attachmentId}`;
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error("Fehler beim Herunterladen");
+      }
+      
+      const data = await response.json();
+      
+      // Convert base64 to blob and download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: data.mime_type });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename || filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success(`${filename} heruntergeladen`);
+    } catch (error) {
+      toast.error("Fehler beim Herunterladen des Anhangs");
+      console.error("Download error:", error);
+    }
   };
 
   const openReplyDialog = () => {
@@ -1092,19 +1234,47 @@ export const EmailsPage = () => {
                       </div>
                     </div>
 
-                    {/* Body */}
-                    <div className="prose prose-sm max-w-full dark:prose-invert bg-white dark:bg-zinc-900 text-zinc-900 dark:text-zinc-100 rounded-lg p-4 border border-border shadow-sm overflow-hidden w-full">
-                      <div 
-                        className="email-content-wrapper overflow-x-auto w-full"
-                        style={{ maxWidth: '100%' }}
-                      >
-                        <div 
-                          className="email-content"
-                          dangerouslySetInnerHTML={{ 
-                            __html: selectedEmail.body_html || selectedEmail.body_text.replace(/\n/g, '<br/>') 
-                          }} 
-                        />
-                      </div>
+                    {/* Body - isolated in iframe to prevent CSS leakage */}
+                    <div className="bg-white dark:bg-zinc-900 rounded-lg border border-border shadow-sm overflow-hidden w-full">
+                      <iframe
+                        srcDoc={`
+                          <!DOCTYPE html>
+                          <html>
+                            <head>
+                              <meta charset="utf-8">
+                              <style>
+                                * { box-sizing: border-box; }
+                                body { 
+                                  margin: 0; 
+                                  padding: 16px; 
+                                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                  font-size: 14px;
+                                  line-height: 1.5;
+                                  color: #18181b;
+                                  background: transparent;
+                                  word-wrap: break-word;
+                                  overflow-wrap: break-word;
+                                }
+                                img { max-width: 100%; height: auto; }
+                                a { color: #0ea5e9; }
+                                pre, code { white-space: pre-wrap; word-wrap: break-word; }
+                                table { max-width: 100%; }
+                              </style>
+                            </head>
+                            <body>${selectedEmail.body_html || selectedEmail.body_text.replace(/\n/g, '<br/>')}</body>
+                          </html>
+                        `}
+                        className="w-full border-0"
+                        style={{ minHeight: '200px', height: 'auto' }}
+                        onLoad={(e) => {
+                          const iframe = e.target as HTMLIFrameElement;
+                          if (iframe.contentDocument) {
+                            iframe.style.height = iframe.contentDocument.body.scrollHeight + 32 + 'px';
+                          }
+                        }}
+                        sandbox="allow-same-origin"
+                        title="E-Mail Inhalt"
+                      />
                     </div>
 
                     {/* Attachments */}
@@ -1115,13 +1285,17 @@ export const EmailsPage = () => {
                         </p>
                         <div className="flex flex-wrap gap-2">
                           {selectedEmail.attachments.map(att => (
-                            <div 
+                            <button 
                               key={att.id}
-                              className="flex items-center gap-2 px-3 py-2 bg-secondary rounded-lg text-sm hover:bg-secondary/80 cursor-pointer"
+                              onClick={() => downloadAttachment(selectedEmail.id, att.id, att.filename)}
+                              className="flex items-center gap-2 px-3 py-2 bg-secondary rounded-lg text-sm hover:bg-primary/10 hover:text-primary cursor-pointer transition-colors group"
+                              title={`${att.filename} herunterladen (${formatFileSize(att.size)})`}
                             >
-                              <PaperClipIcon className="w-4 h-4 text-muted-foreground" />
+                              <PaperClipIcon className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
                               <span className="truncate max-w-[200px]">{att.filename}</span>
-                            </div>
+                              <span className="text-xs text-muted-foreground">({formatFileSize(att.size)})</span>
+                              <ArrowDownTrayIcon className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            </button>
                           ))}
                         </div>
                       </div>
@@ -1152,6 +1326,31 @@ export const EmailsPage = () => {
             <DialogTitle>Neue E-Mail</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-4">
+            {/* Absender-Auswahl */}
+            {allAccounts.length > 0 && (
+              <div className="space-y-2">
+                <Label>Von (Absender)</Label>
+                <Select 
+                  value={composeForm.accountId} 
+                  onValueChange={(value) => setComposeForm({...composeForm, accountId: value})}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Absender wählen" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allAccounts.map((acc) => (
+                      <SelectItem key={acc.id} value={acc.id}>
+                        <span className="flex items-center gap-2">
+                          <EnvelopeIcon className="h-4 w-4" />
+                          {acc.email}
+                          {acc.is_primary && <Badge variant="secondary" className="text-[10px] ml-1">Standard</Badge>}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-2">
               <Label>An</Label>
               <Input 
@@ -1176,9 +1375,65 @@ export const EmailsPage = () => {
                 className="w-full min-h-[200px] p-3 border rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-primary bg-background"
               />
             </div>
+
+            {/* Anhänge */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Anhänge</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => attachmentInputRef.current?.click()}
+                  className="gap-2"
+                >
+                  <PaperClipIcon className="w-4 h-4" />
+                  Datei hinzufügen
+                </Button>
+                <input
+                  ref={attachmentInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+              </div>
+              
+              {attachments.length > 0 && (
+                <div className="space-y-2 p-3 bg-secondary/50 rounded-lg">
+                  {attachments.map((attachment) => (
+                    <div key={attachment.id} className="flex items-center justify-between p-2 bg-background rounded border">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <PaperClipIcon className="w-4 h-4 flex-shrink-0 text-muted-foreground" />
+                        <span className="text-sm truncate">{attachment.filename}</span>
+                        <span className="text-xs text-muted-foreground flex-shrink-0">
+                          ({formatFileSize(attachment.size)})
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeAttachment(attachment.id)}
+                        className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  <p className="text-xs text-muted-foreground">
+                    {attachments.length} Datei(en) · Gesamt: {formatFileSize(attachments.reduce((sum, a) => sum + a.size, 0))}
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setShowComposeDialog(false)}>Abbrechen</Button>
-              <Button onClick={handleSendEmail}>Senden</Button>
+              <Button onClick={handleSendEmail}>
+                {attachments.length > 0 && <PaperClipIcon className="w-4 h-4 mr-2" />}
+                Senden
+              </Button>
             </div>
           </div>
         </DialogContent>
@@ -1346,6 +1601,42 @@ export const EmailsPage = () => {
               />
             </div>
             
+            {/* Objektadresse */}
+            <div className="space-y-2">
+              <Label>StraÇYe + Hausnummer</Label>
+              <Input
+                value={projectForm.project_street}
+                onChange={(e) => setProjectForm({ ...projectForm, project_street: e.target.value })}
+                placeholder="z.B. MusterstraÇYe 123"
+              />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>PLZ</Label>
+                <Input
+                  value={projectForm.project_zip_code}
+                  onChange={(e) => setProjectForm({ ...projectForm, project_zip_code: e.target.value })}
+                  placeholder="12345"
+                />
+              </div>
+              <div className="space-y-2 col-span-2">
+                <Label>Stadt</Label>
+                <Input
+                  value={projectForm.project_city}
+                  onChange={(e) => setProjectForm({ ...projectForm, project_city: e.target.value })}
+                  placeholder="z.B. Berlin"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Land</Label>
+              <Input
+                value={projectForm.project_country}
+                onChange={(e) => setProjectForm({ ...projectForm, project_country: e.target.value })}
+                placeholder="z.B. Deutschland"
+              />
+            </div>
+
             {/* Employee Selection */}
             <div className="space-y-2">
               <Label>Mitarbeiter *</Label>
@@ -1412,24 +1703,40 @@ export const EmailsPage = () => {
                           <Badge variant="outline" className="text-xs">
                             {account.type === "microsoft" ? "Microsoft" : "Gmail"}
                           </Badge>
-                          {account.is_primary && <Badge variant="secondary" className="text-xs">Primär</Badge>}
+                          {account.is_primary && <Badge variant="default" className="text-xs">Standard</Badge>}
                         </div>
                       </div>
                     </div>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => disconnectAccount(account.id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <XMarkIcon className="w-4 h-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      {!account.is_primary && (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setPrimaryAccount(account.id)}
+                          title="Als Standard-Absender setzen"
+                        >
+                          <CheckIcon className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => disconnectAccount(account.id)}
+                        className="text-destructive hover:text-destructive"
+                        title="Konto trennen"
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
             ) : (
               <p className="text-center text-muted-foreground py-4">Keine Konten verbunden</p>
             )}
+            <p className="text-xs text-muted-foreground">
+              Klicke auf <CheckIcon className="w-3 h-3 inline" /> um ein Konto als Standard-Absender zu setzen.
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <Button onClick={() => connectEmailAccount("gmail")} variant="outline" className="w-full">
                 <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">

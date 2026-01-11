@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { projectsApi, customersApi, qcApi } from "@/lib/apiClient";
 import type { ProjectUpdateRequest } from "@/lib/apiClient";
@@ -14,7 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Upload, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip } from "lucide-react";
+import { ArrowLeft, Save, Upload, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox } from "lucide-react";
+import { RichTextEditor } from "@/components/common/RichTextEditor";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 
 interface EmailMessage {
@@ -26,8 +27,26 @@ interface EmailMessage {
   body_text: string;
   body_html?: string;
   date: string;
+  snippet?: string;
+  is_read?: boolean;
   is_outgoing: boolean;
-  attachments?: Array<{ filename: string; size: number }>;
+  has_attachments?: boolean;
+  attachments?: Array<{ id: string; filename: string; size: number }>;
+}
+
+interface EmailAccount {
+  id: string;
+  email: string;
+  provider: string;
+  is_primary: boolean;
+}
+
+interface EmailAttachment {
+  id: string;
+  filename: string;
+  data: string;  // Base64 encoded
+  content_type: string;
+  size: number;
 }
 
 interface Signature {
@@ -71,6 +90,12 @@ export const ProjectDetailPage = () => {
   const [deadline, setDeadline] = useState<string>(""); // Frist/Deadline
   const [additionalEmail, setAdditionalEmail] = useState<string>(""); // Optional: Additional project-specific email
   
+  // Objektadresse
+  const [projectStreet, setProjectStreet] = useState<string>("");
+  const [projectZipCode, setProjectZipCode] = useState<string>("");
+  const [projectCity, setProjectCity] = useState<string>("");
+  const [projectCountry, setProjectCountry] = useState<string>("Deutschland");
+  
   // Notes lists and input
   const [customerNotesList, setCustomerNotesList] = useState<Array<{id: string; text: string; created_at: string}>>([]);
   const [internalNotesList, setInternalNotesList] = useState<Array<{id: string; text: string; created_at: string}>>([]);
@@ -102,15 +127,22 @@ export const ProjectDetailPage = () => {
   // Email communication state
   const [customerEmails, setCustomerEmails] = useState<EmailMessage[]>([]);
   const [loadingEmails, setLoadingEmails] = useState(false);
-  const [showComposeDialog, setShowComposeDialog] = useState(false);
-  const [composeForm, setComposeForm] = useState({ to: "", subject: "", body: "" });
+  const [showComposeBox, setShowComposeBox] = useState(false);
+  const [composeForm, setComposeForm] = useState({ to: "", subject: "", body: "", accountId: "" });
   const [sendingEmail, setSendingEmail] = useState(false);
   const [signatures, setSignatures] = useState<Signature[]>([]);
   const [selectedSignatureId, setSelectedSignatureId] = useState("");
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [expandedEmailId, setExpandedEmailId] = useState<string | null>(null);
+  const [selectedEmail, setSelectedEmail] = useState<EmailMessage | null>(null);
+  const [showReplyBox, setShowReplyBox] = useState(false);
+  const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!id) return;
     loadProject();
+    loadEmailAccounts();
     
     // Load signatures from localStorage
     const savedSignatures = localStorage.getItem("email_signatures");
@@ -118,6 +150,39 @@ export const ProjectDetailPage = () => {
       setSignatures(JSON.parse(savedSignatures));
     }
   }, [id]);
+  
+  const loadEmailAccounts = async () => {
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/email/accounts`, {
+        headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` },
+      });
+      
+      if (!response.ok) return;
+      
+      const data = await response.json();
+      const accounts = (data.accounts || [])
+        .filter((acc: { email: string | null; status: string }) => acc.email && acc.email.trim() !== "" && acc.status === "active")
+        .map((acc: { id: string; email: string; provider: string; is_primary: boolean }) => ({
+          id: acc.id,
+          email: acc.email,
+          provider: acc.provider,
+          is_primary: acc.is_primary,
+        }));
+      
+      setEmailAccounts(accounts);
+      
+      // Set default account - prioritize Microsoft
+      const microsoftAccounts = accounts.filter((a: EmailAccount) => a.provider === "microsoft");
+      const primaryMicrosoft = microsoftAccounts.find((a: EmailAccount) => a.is_primary) || microsoftAccounts[0];
+      const primaryAccount = primaryMicrosoft || accounts.find((a: EmailAccount) => a.is_primary) || accounts[0];
+      
+      if (primaryAccount) {
+        setComposeForm(prev => ({ ...prev, accountId: primaryAccount.id }));
+      }
+    } catch (error) {
+      console.error("Error loading email accounts:", error);
+    }
+  };
   
   // Load customer emails when customer is loaded (including additional project email)
   useEffect(() => {
@@ -160,6 +225,12 @@ export const ProjectDetailPage = () => {
       setDeadline(projectData.deadline || "");
       setAdditionalEmail(projectData.additional_email || "");
       
+      // Objektadresse
+      setProjectStreet(projectData.project_street || "");
+      setProjectZipCode(projectData.project_zip_code || "");
+      setProjectCity(projectData.project_city || "");
+      setProjectCountry(projectData.project_country || "Deutschland");
+      
       // Check if product allows custom credits
       const creditsAllowedProducts = ["HEIZLAST", "HEIZLAST_HYDRAULISCH", "ISFP_ERSTELLUNG", "INDIVIDUELL"];
       setAllowCustomCredits(creditsAllowedProducts.includes(projectData.product_code));
@@ -175,14 +246,14 @@ export const ProjectDetailPage = () => {
     try {
       setLoadingEmails(true);
       
-      // Load emails from all provided addresses using Microsoft endpoint
+      // Load emails from all provided addresses using Microsoft mail endpoint
       const allEmails: EmailMessage[] = [];
       
       for (const email of emails) {
         if (!email) continue;
         
-        // Use Microsoft endpoint for vaillant@team-noah.de
-        const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft/customer-emails?email=${encodeURIComponent(email)}`, {
+        // Use correct Microsoft mail endpoint
+        const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft-mail/customer-emails?email=${encodeURIComponent(email)}`, {
           headers: {
             Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
           },
@@ -212,6 +283,109 @@ export const ProjectDetailPage = () => {
       setLoadingEmails(false);
     }
   };
+  
+  const loadEmailDetails = async (emailId: string) => {
+    try {
+      const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft-mail/emails/${emailId}`, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
+        },
+      });
+      const data = await response.json();
+      setSelectedEmail(data);
+      setShowReplyBox(false);
+    } catch (error) {
+      toast.error("Fehler beim Laden der E-Mail");
+    }
+  };
+  
+  const downloadEmailAttachment = async (emailId: string, attachmentId: string, filename: string) => {
+    try {
+      const endpoint = `${API_CONFIG.BASE_URL}/microsoft-mail/emails/${emailId}/attachments/${attachmentId}`;
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error("Fehler beim Herunterladen");
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success(`${filename} heruntergeladen`);
+    } catch (error) {
+      toast.error("Fehler beim Herunterladen des Anhangs");
+    }
+  };
+  
+  const replyToEmail = () => {
+    if (!selectedEmail) return;
+    
+    const defaultSig = signatures.find(s => s.isDefault);
+    const quotedText = selectedEmail.body_text?.split("\n").join("\n> ") || "";
+    const quotedSection = `\n\n---\nAm ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEmail.from_name}:\n> ${quotedText}`;
+    
+    setComposeForm({
+      to: selectedEmail.from,
+      subject: `Re: ${selectedEmail.subject}`,
+      body: defaultSig ? `\n\n${defaultSig.content}${quotedSection}` : quotedSection,
+      accountId: composeForm.accountId,
+    });
+    setAttachments([]);
+    setShowReplyBox(true);
+  };
+
+  // Attachment handlers
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`Datei "${file.name}" ist zu groß (max. 10 MB)`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        setAttachments(prev => [...prev, {
+          id: crypto.randomUUID(),
+          filename: file.name,
+          data: base64,
+          content_type: file.type || 'application/octet-stream',
+          size: file.size,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    
+    // Reset input
+    e.target.value = '';
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
 
   const openComposeEmailDialog = () => {
     if (!customer) return;
@@ -219,15 +393,24 @@ export const ProjectDetailPage = () => {
     const defaultSig = signatures.find(s => s.isDefault);
     const projectRef = projectNumber ? `[Projekt ${projectNumber}] ` : "";
     
+    // Prioritize Microsoft accounts
+    const microsoftAccounts = emailAccounts.filter(a => a.provider === "microsoft");
+    const primaryMicrosoft = microsoftAccounts.find(a => a.is_primary) || microsoftAccounts[0];
+    const primaryAccount = primaryMicrosoft || emailAccounts.find(a => a.is_primary) || emailAccounts[0];
+    
     setComposeForm({
       to: customer.email || "",
       subject: `${projectRef}${project?.product_name || ""}`,
       body: defaultSig ? `\n\n${defaultSig.content}` : "",
+      accountId: primaryAccount?.id || "",
     });
     if (defaultSig) {
       setSelectedSignatureId(defaultSig.id);
     }
-    setShowComposeDialog(true);
+    setAttachments([]);
+    setExpandedEmailId(null);
+    setShowReplyBox(false);
+    setShowComposeBox(true);
   };
 
   const handleSendEmail = async () => {
@@ -238,8 +421,13 @@ export const ProjectDetailPage = () => {
     
     try {
       setSendingEmail(true);
-      // Use Microsoft endpoint for vaillant@team-noah.de
-      const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft/send`, {
+      
+      // Determine which endpoint to use based on selected account
+      const selectedAccount = emailAccounts.find(a => a.id === composeForm.accountId);
+      const provider = selectedAccount?.provider || "microsoft";
+      const endpoint = provider === "gmail" ? "gmail/send" : "microsoft-mail/send";
+      
+      const response = await fetch(`${API_CONFIG.BASE_URL}/${endpoint}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -249,6 +437,13 @@ export const ProjectDetailPage = () => {
           to: composeForm.to,
           subject: composeForm.subject,
           body: composeForm.body,
+          account_id: composeForm.accountId,
+          is_html: true,
+          attachments: attachments.length > 0 ? attachments.map(a => ({
+            filename: a.filename,
+            data: a.data,
+            content_type: a.content_type,
+          })) : undefined,
         }),
       });
       
@@ -258,9 +453,14 @@ export const ProjectDetailPage = () => {
         throw new Error(errorMessage);
       }
       
-      toast.success("E-Mail gesendet!");
-      setShowComposeDialog(false);
-      setComposeForm({ to: "", subject: "", body: "" });
+      const sentFrom = selectedAccount?.email || "unbekannt";
+      const attachmentText = attachments.length > 0 ? ` mit ${attachments.length} Anhang/Anhängen` : "";
+      toast.success(`E-Mail erfolgreich gesendet von ${sentFrom}${attachmentText}!`);
+      
+      setShowComposeBox(false);
+      setShowReplyBox(false);
+      setAttachments([]);
+      setComposeForm({ to: "", subject: "", body: "", accountId: composeForm.accountId });
       
       // Reload emails to show the sent one
       const emailsToLoad = [customer?.email, additionalEmail].filter(Boolean) as string[];
@@ -363,6 +563,11 @@ export const ProjectDetailPage = () => {
         internal_notes: internalNotes,
         deadline: deadline || undefined,
         additional_email: additionalEmail || undefined,
+        // Objektadresse
+        project_street: projectStreet || undefined,
+        project_zip_code: projectZipCode || undefined,
+        project_city: projectCity || undefined,
+        project_country: projectCountry || undefined,
       };
       
       if (status === "FERTIGGESTELLT") {
@@ -396,6 +601,11 @@ export const ProjectDetailPage = () => {
         internal_notes: internalNotes,
         deadline: deadline || undefined,
         additional_email: additionalEmail || undefined,
+        // Objektadresse
+        project_street: projectStreet || undefined,
+        project_zip_code: projectZipCode || undefined,
+        project_city: projectCity || undefined,
+        project_country: projectCountry || undefined,
       };
       
       if (status === "FERTIGGESTELLT") {
@@ -831,6 +1041,47 @@ export const ProjectDetailPage = () => {
                   E-Mails an diese Adresse werden ebenfalls im Projekt angezeigt
                 </p>
               </div>
+              
+              {/* Objektadresse */}
+              <div className="border-t pt-4 mt-4">
+                <h4 className="font-medium text-sm text-muted-foreground mb-3">Objektadresse</h4>
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-xs">Straße + Hausnummer</Label>
+                    <Input
+                      value={projectStreet}
+                      onChange={(e) => setProjectStreet(e.target.value)}
+                      placeholder="z.B. Musterstraße 123"
+                    />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div>
+                      <Label className="text-xs">PLZ</Label>
+                      <Input
+                        value={projectZipCode}
+                        onChange={(e) => setProjectZipCode(e.target.value)}
+                        placeholder="12345"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <Label className="text-xs">Stadt</Label>
+                      <Input
+                        value={projectCity}
+                        onChange={(e) => setProjectCity(e.target.value)}
+                        placeholder="z.B. Berlin"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-xs">Land</Label>
+                    <Input
+                      value={projectCountry}
+                      onChange={(e) => setProjectCountry(e.target.value)}
+                      placeholder="z.B. Deutschland"
+                    />
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -998,11 +1249,183 @@ export const ProjectDetailPage = () => {
                     </div>
                   </div>
                   <Button onClick={openComposeEmailDialog} className="gap-2">
-                    <Send className="h-4 w-4" />
-                    E-Mail verfassen
+                    <Mail className="h-4 w-4" />
+                    E-Mail schreiben
                   </Button>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Compose Box - E-Mail schreiben */}
+                  {showComposeBox && (
+                    <div className="mb-4 p-4 border rounded-lg bg-muted/20">
+                      <div className="flex items-center justify-between mb-4">
+                        <h4 className="font-semibold">Neue E-Mail verfassen</h4>
+                        <Button onClick={() => setShowComposeBox(false)} variant="ghost" size="sm">
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {/* Account-Auswahl */}
+                        {emailAccounts.length > 0 && (
+                          <div className="space-y-2">
+                            <Label className="text-xs">Senden von</Label>
+                            <Select 
+                              value={composeForm.accountId} 
+                              onValueChange={(value) => setComposeForm({ ...composeForm, accountId: value })}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="E-Mail-Konto wählen" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {emailAccounts.map((acc) => (
+                                  <SelectItem key={acc.id} value={acc.id}>
+                                    <span className="flex items-center gap-2">
+                                      <Mail className="h-3 w-3" />
+                                      {acc.email}
+                                      {acc.is_primary && <Badge variant="secondary" className="text-[10px] ml-1">Standard</Badge>}
+                                    </span>
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">An</Label>
+                          {/* Show dropdown if multiple email addresses available */}
+                          {(customer?.email && additionalEmail) ? (
+                            <Select 
+                              value={composeForm.to} 
+                              onValueChange={(value) => setComposeForm({...composeForm, to: value})}
+                            >
+                              <SelectTrigger className="h-8 text-sm">
+                                <SelectValue placeholder="Empfänger wählen" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value={customer.email}>
+                                  {customer.name} ({customer.email})
+                                </SelectItem>
+                                <SelectItem value={additionalEmail}>
+                                  Zusätzlicher Kontakt ({additionalEmail})
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              type="email"
+                              value={composeForm.to}
+                              onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
+                              className="h-8 text-sm"
+                            />
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Betreff</Label>
+                          <Input
+                            value={composeForm.subject}
+                            onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
+                            className="h-8 text-sm"
+                            placeholder="Betreff eingeben..."
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Nachricht (mit Formatierung)</Label>
+                          <RichTextEditor
+                            content={composeForm.body}
+                            onChange={(html) => setComposeForm(prev => ({ ...prev, body: html }))}
+                            placeholder="Ihre Nachricht..."
+                          />
+                        </div>
+
+                        {/* Anhänge */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">Anhänge</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => attachmentInputRef.current?.click()}
+                              className="h-7 text-xs gap-1"
+                            >
+                              <Paperclip className="w-3 h-3" />
+                              Datei hinzufügen
+                            </Button>
+                            <input
+                              ref={attachmentInputRef}
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={handleFileSelect}
+                            />
+                          </div>
+                          
+                          {attachments.length > 0 && (
+                            <div className="space-y-1 p-2 bg-secondary/50 rounded-lg">
+                              {attachments.map((attachment) => (
+                                <div key={attachment.id} className="flex items-center justify-between p-1.5 bg-background rounded border text-xs">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Paperclip className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                                    <span className="truncate">{attachment.filename}</span>
+                                    <span className="text-muted-foreground flex-shrink-0">
+                                      ({formatFileSize(attachment.size)})
+                                    </span>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeAttachment(attachment.id)}
+                                    className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                              <p className="text-[10px] text-muted-foreground">
+                                {attachments.length} Datei(en) · {formatFileSize(attachments.reduce((sum, a) => sum + a.size, 0))}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs">Signatur</Label>
+                          <div className="flex gap-2">
+                            <Select value={selectedSignatureId} onValueChange={setSelectedSignatureId}>
+                              <SelectTrigger className="flex-1 h-8 text-sm">
+                                <SelectValue placeholder="Signatur wählen" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {signatures.map((sig) => (
+                                  <SelectItem key={sig.id} value={sig.id}>
+                                    {sig.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Button onClick={insertSignature} variant="outline" size="sm" disabled={!selectedSignatureId}>
+                              Einfügen
+                            </Button>
+                          </div>
+                        </div>
+
+                        <div className="flex gap-2 pt-2">
+                          <Button onClick={() => setShowComposeBox(false)} variant="outline" size="sm" className="flex-1">
+                            Abbrechen
+                          </Button>
+                          <Button onClick={handleSendEmail} disabled={sendingEmail} size="sm" className="flex-1 bg-emerald-500 hover:bg-emerald-600">
+                            <Mail className="h-4 w-4 mr-2" />
+                            {sendingEmail ? 'Sendet...' : 'Senden'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {!customer?.email && !additionalEmail ? (
                     <div className="text-center py-8 text-muted-foreground">
                       <Mail className="h-12 w-12 mx-auto mb-4 opacity-20" />
@@ -1023,42 +1446,274 @@ export const ProjectDetailPage = () => {
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                    <div className="space-y-3 max-h-[600px] overflow-y-auto">
                       {customerEmails.map((email) => (
                         <div 
                           key={email.id} 
-                          className={`p-4 border rounded-lg ${
+                          className={`border rounded-lg overflow-hidden ${
                             email.is_outgoing 
-                              ? 'bg-blue-50/50 border-blue-200 ml-8' 
-                              : 'bg-muted/20 mr-8'
-                          }`}
+                              ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800' 
+                              : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                          } ${!email.is_read && !email.is_outgoing ? 'ring-2 ring-emerald-400' : ''}`}
                         >
-                          <div className="flex items-start justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium ${
-                                email.is_outgoing ? 'bg-blue-500 text-white' : 'bg-gray-200'
-                              }`}>
-                                {email.is_outgoing ? 'ICH' : email.from_name?.charAt(0)?.toUpperCase() || '?'}
-                              </div>
-                              <div>
-                                <p className="text-sm font-medium">
-                                  {email.is_outgoing ? 'An: ' + email.to : email.from_name || email.from}
+                          {/* Email Header - Klickbar */}
+                          <div
+                            onClick={() => {
+                              if (expandedEmailId === email.id) {
+                                setExpandedEmailId(null);
+                                setShowReplyBox(false);
+                              } else {
+                                loadEmailDetails(email.id);
+                                setExpandedEmailId(email.id);
+                              }
+                            }}
+                            className="p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+                          >
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {/* Richtungs-Indikator */}
+                                {email.is_outgoing ? (
+                                  <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                    <Send className="h-4 w-4" />
+                                    <span className="text-[10px] font-medium uppercase">Gesendet</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                    <Inbox className="h-4 w-4" />
+                                    <span className="text-[10px] font-medium uppercase">Erhalten</span>
+                                  </div>
+                                )}
+                                <p className={`font-medium text-sm ${
+                                  !email.is_read && !email.is_outgoing ? 'font-bold' : ''
+                                }`}>
+                                  {email.subject}
                                 </p>
-                                <p className="text-xs text-muted-foreground">{formatEmailDate(email.date)}</p>
+                                {!email.is_read && !email.is_outgoing && (
+                                  <Badge variant="default" className="bg-emerald-500 text-white text-xs px-2 py-0">
+                                    Neu
+                                  </Badge>
+                                )}
                               </div>
+                              <span className="text-xs text-muted-foreground">
+                                {formatEmailDate(email.date)}
+                              </span>
                             </div>
-                            {email.attachments && email.attachments.length > 0 && (
-                              <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                                <Paperclip className="h-3 w-3" />
-                                {email.attachments.length}
-                              </div>
-                            )}
+                            <p className="text-xs text-muted-foreground">
+                              {email.is_outgoing ? `An: ${email.to}` : `Von: ${email.from_name || email.from}`}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate mt-1">{email.snippet || email.body_text?.substring(0, 100)}</p>
                           </div>
-                          <p className="text-sm font-medium mb-1">{email.subject}</p>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap line-clamp-4">
-                            {email.body_text?.substring(0, 300)}
-                            {email.body_text && email.body_text.length > 300 && '...'}
-                          </p>
+
+                          {/* Expanded Email Content */}
+                          {expandedEmailId === email.id && selectedEmail && (
+                            <div className="px-4 pb-4 space-y-4 border-t bg-muted/20">
+                              {/* Email Body */}
+                              <div className="pt-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                  <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-semibold">
+                                    {selectedEmail.from_name?.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2) || '?'}
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-medium">{selectedEmail.from_name}</p>
+                                    <p className="text-xs text-muted-foreground">{selectedEmail.from}</p>
+                                  </div>
+                                </div>
+                                {/* E-Mail Body */}
+                                <div className="bg-white rounded border overflow-hidden">
+                                  <iframe
+                                    srcDoc={`
+                                      <!DOCTYPE html>
+                                      <html>
+                                        <head>
+                                          <meta charset="utf-8">
+                                          <style>
+                                            * { box-sizing: border-box; }
+                                            body { 
+                                              margin: 0; 
+                                              padding: 12px; 
+                                              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                              font-size: 13px;
+                                              line-height: 1.5;
+                                              color: #18181b;
+                                              background: transparent;
+                                              word-wrap: break-word;
+                                            }
+                                            img { max-width: 100%; height: auto; }
+                                            a { color: #0ea5e9; }
+                                            pre, code { white-space: pre-wrap; }
+                                            table { max-width: 100%; }
+                                          </style>
+                                        </head>
+                                        <body>${selectedEmail.body_html || selectedEmail.body_text}</body>
+                                      </html>
+                                    `}
+                                    className="w-full border-0"
+                                    style={{ minHeight: '100px', height: 'auto' }}
+                                    onLoad={(e) => {
+                                      const iframe = e.target as HTMLIFrameElement;
+                                      if (iframe.contentDocument) {
+                                        iframe.style.height = iframe.contentDocument.body.scrollHeight + 24 + 'px';
+                                      }
+                                    }}
+                                    sandbox="allow-same-origin"
+                                    title="E-Mail Inhalt"
+                                  />
+                                </div>
+
+                                {/* Anhänge */}
+                                {selectedEmail.has_attachments && selectedEmail.attachments && selectedEmail.attachments.length > 0 && (
+                                  <div className="mt-4 pt-4 border-t">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                                      {selectedEmail.attachments.length} Anhang{selectedEmail.attachments.length > 1 ? 'e' : ''}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {selectedEmail.attachments.map(att => (
+                                        <button 
+                                          key={att.id}
+                                          onClick={() => downloadEmailAttachment(selectedEmail.id, att.id, att.filename)}
+                                          className="flex items-center gap-2 px-2 py-1.5 bg-secondary rounded text-xs hover:bg-primary/10 hover:text-primary transition-colors group"
+                                          title={`${att.filename} herunterladen`}
+                                        >
+                                          <Paperclip className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+                                          <span className="truncate max-w-[150px]">{att.filename}</span>
+                                          <FileDown className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Reply Button */}
+                              {!showReplyBox && (
+                                <Button onClick={replyToEmail} variant="outline" size="sm" className="w-full">
+                                  <Reply className="h-4 w-4 mr-2" />
+                                  Antworten
+                                </Button>
+                              )}
+
+                              {/* Reply Form */}
+                              {showReplyBox && (
+                                <div className="space-y-3 bg-background p-4 rounded-lg border">
+                                  <div className="flex items-center justify-between">
+                                    <h4 className="font-semibold text-sm">Antwort verfassen</h4>
+                                    <Button onClick={() => setShowReplyBox(false)} variant="ghost" size="sm">
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+
+                                  {/* Account-Auswahl */}
+                                  {emailAccounts.length > 0 && (
+                                    <div className="space-y-2">
+                                      <Label className="text-xs">Senden von</Label>
+                                      <Select 
+                                        value={composeForm.accountId} 
+                                        onValueChange={(value) => setComposeForm({ ...composeForm, accountId: value })}
+                                      >
+                                        <SelectTrigger className="h-8 text-sm">
+                                          <SelectValue placeholder="E-Mail-Konto wählen" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {emailAccounts.map((acc) => (
+                                            <SelectItem key={acc.id} value={acc.id}>
+                                              <span className="flex items-center gap-2">
+                                                <Mail className="h-3 w-3" />
+                                                {acc.email}
+                                                {acc.is_primary && <Badge variant="secondary" className="text-[10px] ml-1">Standard</Badge>}
+                                              </span>
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                    </div>
+                                  )}
+
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">An</Label>
+                                    <Input
+                                      type="email"
+                                      value={composeForm.to}
+                                      onChange={(e) => setComposeForm({ ...composeForm, to: e.target.value })}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">Betreff</Label>
+                                    <Input
+                                      value={composeForm.subject}
+                                      onChange={(e) => setComposeForm({ ...composeForm, subject: e.target.value })}
+                                      className="h-8 text-sm"
+                                    />
+                                  </div>
+
+                                  <div className="space-y-2">
+                                    <Label className="text-xs">Nachricht</Label>
+                                    <RichTextEditor
+                                      content={composeForm.body}
+                                      onChange={(html) => setComposeForm(prev => ({ ...prev, body: html }))}
+                                      placeholder="Ihre Nachricht..."
+                                    />
+                                  </div>
+
+                                  {/* Anhänge im Reply */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-xs">Anhänge</Label>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => attachmentInputRef.current?.click()}
+                                        className="h-7 text-xs gap-1"
+                                      >
+                                        <Paperclip className="w-3 h-3" />
+                                        Datei hinzufügen
+                                      </Button>
+                                    </div>
+                                    
+                                    {attachments.length > 0 && (
+                                      <div className="space-y-1 p-2 bg-secondary/50 rounded-lg">
+                                        {attachments.map((attachment) => (
+                                          <div key={attachment.id} className="flex items-center justify-between p-1.5 bg-background rounded border text-xs">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                              <Paperclip className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                                              <span className="truncate">{attachment.filename}</span>
+                                              <span className="text-muted-foreground flex-shrink-0">
+                                                ({formatFileSize(attachment.size)})
+                                              </span>
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => removeAttachment(attachment.id)}
+                                              className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        ))}
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {attachments.length} Datei(en) · {formatFileSize(attachments.reduce((sum, a) => sum + a.size, 0))}
+                                        </p>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  <div className="flex gap-2 pt-2">
+                                    <Button onClick={() => setShowReplyBox(false)} variant="outline" size="sm" className="flex-1">
+                                      Abbrechen
+                                    </Button>
+                                    <Button onClick={handleSendEmail} disabled={sendingEmail} size="sm" className="flex-1 bg-emerald-500 hover:bg-emerald-600">
+                                      <Send className="h-4 w-4 mr-2" />
+                                      {sendingEmail ? 'Sendet...' : 'Senden'}
+                                    </Button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1226,109 +1881,6 @@ export const ProjectDetailPage = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Email Compose Dialog */}
-      <Dialog open={showComposeDialog} onOpenChange={setShowComposeDialog}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Mail className="h-5 w-5" />
-              E-Mail verfassen
-            </DialogTitle>
-            {projectNumber && (
-              <DialogDescription>
-                Projekt: {projectNumber} - {project?.product_name}
-              </DialogDescription>
-            )}
-          </DialogHeader>
-          
-          <div className="space-y-4 pt-4">
-            <div className="space-y-2">
-              <Label>An</Label>
-              {/* Show dropdown if multiple email addresses available */}
-              {(customer?.email && additionalEmail) ? (
-                <Select 
-                  value={composeForm.to} 
-                  onValueChange={(value) => setComposeForm({...composeForm, to: value})}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Empfänger wählen" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value={customer.email}>
-                      {customer.name} ({customer.email})
-                    </SelectItem>
-                    <SelectItem value={additionalEmail}>
-                      Zusätzlicher Kontakt ({additionalEmail})
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <Input 
-                  type="email"
-                  value={composeForm.to}
-                  onChange={(e) => setComposeForm({...composeForm, to: e.target.value})}
-                  placeholder="empfaenger@example.com"
-                />
-              )}
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Betreff</Label>
-              <Input 
-                value={composeForm.subject}
-                onChange={(e) => setComposeForm({...composeForm, subject: e.target.value})}
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <Label>Nachricht</Label>
-              <Textarea 
-                value={composeForm.body}
-                onChange={(e) => setComposeForm({...composeForm, body: e.target.value})}
-                rows={10}
-                placeholder="Ihre Nachricht..."
-              />
-            </div>
-            
-            {signatures.length > 0 && (
-              <div className="space-y-2">
-                <Label className="text-xs">Signatur</Label>
-                <div className="flex gap-2">
-                  <Select value={selectedSignatureId} onValueChange={setSelectedSignatureId}>
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Signatur wählen" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {signatures.map((sig) => (
-                        <SelectItem key={sig.id} value={sig.id}>
-                          {sig.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button onClick={insertSignature} variant="outline" size="sm" disabled={!selectedSignatureId}>
-                    Einfügen
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <DialogFooter className="flex gap-2 pt-4">
-            <Button variant="outline" onClick={() => setShowComposeDialog(false)}>
-              Abbrechen
-            </Button>
-            <Button 
-              onClick={handleSendEmail}
-              disabled={sendingEmail || !composeForm.to || !composeForm.subject}
-              className="gap-2"
-            >
-              <Send className="h-4 w-4" />
-              {sendingEmail ? 'Wird gesendet...' : 'Senden'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

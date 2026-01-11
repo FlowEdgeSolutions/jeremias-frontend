@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { customersApi, projectsApi, invoicesApi } from "@/lib/apiClient";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
@@ -16,8 +16,16 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X, Download, ExternalLink } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X, Download, ExternalLink, Paperclip, FileDown, Send, Inbox } from "lucide-react";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
+
+interface EmailAttachment {
+  id: string;
+  filename: string;
+  data: string;
+  content_type: string;
+  size: number;
+}
 
 const PRODUCT_LABELS: Record<string, string> = {
   "3D_MODELLIERUNG_HUELLE": "3D Modellierung (nur thermische Hülle)",
@@ -75,6 +83,7 @@ interface EmailDetail {
   body_html: string;
   body_text: string;
   is_read: boolean;
+  is_outgoing: boolean;  // true = gesendet, false = erhalten
   has_attachments: boolean;
   attachments: Array<{
     id: string;
@@ -145,6 +154,8 @@ export const CustomerDetailPage = () => {
     body: "",
     accountId: "",
   });
+  const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
+  const attachmentInputRef = useRef<HTMLInputElement>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showComposeBox, setShowComposeBox] = useState(false);
   const [emailAccounts, setEmailAccounts] = useState<Array<{ id: string; email: string; provider: string; is_primary: boolean }>>([]);
@@ -265,38 +276,34 @@ export const CustomerDetailPage = () => {
 
   const loadEmailAccounts = async () => {
     try {
-      // Try Microsoft accounts first
-      const msResponse = await fetch(`${API_CONFIG.BASE_URL}/microsoft/accounts`, {
+      // Use unified email accounts API
+      const response = await fetch(`${API_CONFIG.BASE_URL}/email/accounts`, {
         headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` },
       });
       
-      const accounts: Array<{ id: string; email: string; provider: string; is_primary: boolean }> = [];
-      
-      if (msResponse.ok) {
-        const msData = await msResponse.json();
-        accounts.push(...(msData.accounts || []).map((acc: { id: string; email: string; is_primary: boolean }) => ({
-          ...acc,
-          provider: "microsoft"
-        })));
+      if (!response.ok) {
+        console.error("Failed to load email accounts");
+        return;
       }
       
-      // Try Gmail accounts
-      const gmailResponse = await fetch(`${API_CONFIG.BASE_URL}/gmail/accounts`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` },
-      });
-      
-      if (gmailResponse.ok) {
-        const gmailData = await gmailResponse.json();
-        accounts.push(...(gmailData || []).map((acc: { id: string; email: string; is_primary: boolean }) => ({
-          ...acc,
-          provider: "gmail"
-        })));
-      }
+      const data = await response.json();
+      // Filter out accounts without valid email addresses
+      const accounts = (data.accounts || [])
+        .filter((acc: { email: string | null }) => acc.email && acc.email.trim() !== "")
+        .map((acc: { id: string; email: string; provider: string; is_primary: boolean }) => ({
+          id: acc.id,
+          email: acc.email,
+          provider: acc.provider,
+          is_primary: acc.is_primary,
+        }));
       
       setEmailAccounts(accounts);
       
-      // Set default account
-      const primaryAccount = accounts.find(a => a.is_primary) || accounts[0];
+      // Set default account - PRIORITIZE Microsoft accounts
+      const microsoftAccounts = accounts.filter((a: { provider: string }) => a.provider === "microsoft");
+      const primaryMicrosoft = microsoftAccounts.find((a: { is_primary: boolean }) => a.is_primary) || microsoftAccounts[0];
+      const primaryAccount = primaryMicrosoft || accounts.find((a: { is_primary: boolean }) => a.is_primary) || accounts[0];
+      
       if (primaryAccount) {
         setComposeForm(prev => ({ ...prev, accountId: primaryAccount.id }));
       }
@@ -348,9 +355,9 @@ export const CustomerDetailPage = () => {
     if (!details?.customer.email) return;
     
     try {
-      // Use Microsoft endpoint for vaillant@team-noah.de
+      // Use Microsoft mail endpoint to get customer emails
       const response = await fetch(
-        `${API_CONFIG.BASE_URL}/microsoft/customer-emails?email=${encodeURIComponent(details.customer.email)}`,
+        `${API_CONFIG.BASE_URL}/microsoft-mail/customer-emails?email=${encodeURIComponent(details.customer.email)}`,
         {
           headers: {
             Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
@@ -375,7 +382,8 @@ export const CustomerDetailPage = () => {
 
   const loadEmailDetails = async (emailId: string) => {
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/emails/${emailId}`, {
+      // Use Microsoft mail endpoint for customer emails
+      const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft-mail/emails/${emailId}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
         },
@@ -447,6 +455,86 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
     }
   };
 
+  // Attachment handlers
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} ist zu groß (max. 10MB)`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        setAttachments(prev => [...prev, {
+          id: crypto.randomUUID(),
+          filename: file.name,
+          data: base64,
+          content_type: file.type || 'application/octet-stream',
+          size: file.size,
+        }]);
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const downloadEmailAttachment = async (emailId: string, attachmentId: string, filename: string) => {
+    try {
+      // Customer emails are always from Microsoft accounts
+      const endpoint = `${API_CONFIG.BASE_URL}/microsoft-mail/emails/${emailId}/attachments/${attachmentId}`;
+      
+      const response = await fetch(endpoint, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`,
+        },
+      });
+      
+      if (!response.ok) {
+        throw new Error("Fehler beim Herunterladen");
+      }
+      
+      const data = await response.json();
+      
+      // Convert base64 to blob and download
+      const byteCharacters = atob(data.data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: data.mime_type });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = data.filename || filename;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      toast.success(`${filename} heruntergeladen`);
+    } catch (error) {
+      toast.error("Fehler beim Herunterladen des Anhangs");
+      console.error("Download error:", error);
+    }
+  };
+
   const handleSendEmail = async () => {
     try {
       if (!composeForm.to || !composeForm.subject) {
@@ -457,7 +545,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       // Determine which endpoint to use based on selected account
       const selectedAccount = emailAccounts.find(a => a.id === composeForm.accountId);
       const provider = selectedAccount?.provider || "microsoft";
-      const endpoint = provider === "gmail" ? "gmail/send" : "microsoft/send";
+      const endpoint = provider === "gmail" ? "gmail/send" : "microsoft-mail/send";
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/${endpoint}`, {
         method: "POST",
@@ -470,6 +558,11 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
           subject: composeForm.subject,
           body: composeForm.body,
           account_id: composeForm.accountId || undefined,
+          attachments: attachments.length > 0 ? attachments.map(a => ({
+            filename: a.filename,
+            data: a.data,
+            content_type: a.content_type,
+          })) : undefined,
         }),
       });
 
@@ -480,9 +573,11 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       }
 
       const sentFrom = selectedAccount?.email || "unbekannt";
-      toast.success(`E-Mail erfolgreich gesendet von ${sentFrom}!`);
+      const attachmentText = attachments.length > 0 ? ` mit ${attachments.length} Anhang/Anhängen` : "";
+      toast.success(`E-Mail erfolgreich gesendet von ${sentFrom}${attachmentText}!`);
       setShowReplyBox(false);
       setShowComposeBox(false);
+      setAttachments([]);
       setComposeForm({
         to: "",
         subject: "",
@@ -1493,6 +1588,58 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                           />
                         </div>
 
+                        {/* Anhänge */}
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-xs">Anhänge</Label>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => attachmentInputRef.current?.click()}
+                              className="h-7 text-xs gap-1"
+                            >
+                              <Paperclip className="w-3 h-3" />
+                              Datei hinzufügen
+                            </Button>
+                            <input
+                              ref={attachmentInputRef}
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={handleFileSelect}
+                            />
+                          </div>
+                          
+                          {attachments.length > 0 && (
+                            <div className="space-y-1 p-2 bg-secondary/50 rounded-lg">
+                              {attachments.map((attachment) => (
+                                <div key={attachment.id} className="flex items-center justify-between p-1.5 bg-background rounded border text-xs">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <Paperclip className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                                    <span className="truncate">{attachment.filename}</span>
+                                    <span className="text-muted-foreground flex-shrink-0">
+                                      ({formatFileSize(attachment.size)})
+                                    </span>
+                                  </div>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => removeAttachment(attachment.id)}
+                                    className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </Button>
+                                </div>
+                              ))}
+                              <p className="text-[10px] text-muted-foreground">
+                                {attachments.length} Datei(en) · {formatFileSize(attachments.reduce((sum, a) => sum + a.size, 0))}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+
                         <div className="space-y-2">
                           <Label className="text-xs">Signatur</Label>
                           <div className="flex gap-2">
@@ -1535,9 +1682,11 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                       customerEmails.map((email) => (
                         <div 
                           key={email.id} 
-                          className={`border rounded-lg ${
-                            !email.is_read ? 'bg-blue-50 border-blue-300' : ''
-                          }`}
+                          className={`border rounded-lg overflow-hidden ${
+                            email.is_outgoing 
+                              ? 'bg-blue-50/50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800' 
+                              : 'bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800'
+                          } ${!email.is_read && !email.is_outgoing ? 'ring-2 ring-emerald-400' : ''}`}
                         >
                           {/* Email Header - Klickbar */}
                           <div
@@ -1554,16 +1703,25 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                           >
                             <div className="flex items-start justify-between mb-2">
                               <div className="flex items-center gap-2">
-                                <Mail className={`h-4 w-4 ${
-                                  !email.is_read ? 'text-blue-600' : 'text-purple-500'
-                                }`} />
+                                {/* Richtungs-Indikator */}
+                                {email.is_outgoing ? (
+                                  <div className="flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                    <Send className="h-4 w-4" />
+                                    <span className="text-[10px] font-medium uppercase">Gesendet</span>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                                    <Inbox className="h-4 w-4" />
+                                    <span className="text-[10px] font-medium uppercase">Erhalten</span>
+                                  </div>
+                                )}
                                 <p className={`font-medium text-sm ${
-                                  !email.is_read ? 'font-bold' : ''
+                                  !email.is_read && !email.is_outgoing ? 'font-bold' : ''
                                 }`}>
                                   {email.subject}
                                 </p>
-                                {!email.is_read && (
-                                  <Badge variant="default" className="bg-blue-500 text-white text-xs px-2 py-0">
+                                {!email.is_read && !email.is_outgoing && (
+                                  <Badge variant="default" className="bg-emerald-500 text-white text-xs px-2 py-0">
                                     Neu
                                   </Badge>
                                 )}
@@ -1572,7 +1730,9 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                                 {formatEmailDate(email.date)}
                               </span>
                             </div>
-                            <p className="text-xs text-muted-foreground">Von: {email.from_name}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {email.is_outgoing ? `An: ${email.to}` : `Von: ${email.from_name}`}
+                            </p>
                             <p className="text-xs text-muted-foreground truncate mt-1">{email.snippet}</p>
                           </div>
 
@@ -1590,10 +1750,70 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                                     <p className="text-xs text-muted-foreground">{selectedEmail.from}</p>
                                   </div>
                                 </div>
-                                <div
-                                  className="prose prose-sm max-w-none"
-                                  dangerouslySetInnerHTML={{ __html: selectedEmail.body_html || selectedEmail.body_text }}
-                                />
+                                {/* E-Mail Body - isolated in iframe to prevent CSS leakage */}
+                                <div className="bg-white rounded border overflow-hidden">
+                                  <iframe
+                                    srcDoc={`
+                                      <!DOCTYPE html>
+                                      <html>
+                                        <head>
+                                          <meta charset="utf-8">
+                                          <style>
+                                            * { box-sizing: border-box; }
+                                            body { 
+                                              margin: 0; 
+                                              padding: 12px; 
+                                              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                                              font-size: 13px;
+                                              line-height: 1.5;
+                                              color: #18181b;
+                                              background: transparent;
+                                              word-wrap: break-word;
+                                            }
+                                            img { max-width: 100%; height: auto; }
+                                            a { color: #0ea5e9; }
+                                            pre, code { white-space: pre-wrap; }
+                                            table { max-width: 100%; }
+                                          </style>
+                                        </head>
+                                        <body>${selectedEmail.body_html || selectedEmail.body_text}</body>
+                                      </html>
+                                    `}
+                                    className="w-full border-0"
+                                    style={{ minHeight: '100px', height: 'auto' }}
+                                    onLoad={(e) => {
+                                      const iframe = e.target as HTMLIFrameElement;
+                                      if (iframe.contentDocument) {
+                                        iframe.style.height = iframe.contentDocument.body.scrollHeight + 24 + 'px';
+                                      }
+                                    }}
+                                    sandbox="allow-same-origin"
+                                    title="E-Mail Inhalt"
+                                  />
+                                </div>
+
+                                {/* Anhänge der E-Mail */}
+                                {selectedEmail.has_attachments && selectedEmail.attachments.length > 0 && (
+                                  <div className="mt-4 pt-4 border-t">
+                                    <p className="text-xs font-medium text-muted-foreground mb-2">
+                                      {selectedEmail.attachments.length} Anhang{selectedEmail.attachments.length > 1 ? 'e' : ''}
+                                    </p>
+                                    <div className="flex flex-wrap gap-2">
+                                      {selectedEmail.attachments.map(att => (
+                                        <button 
+                                          key={att.id}
+                                          onClick={() => downloadEmailAttachment(selectedEmail.id, att.id, att.filename)}
+                                          className="flex items-center gap-2 px-2 py-1.5 bg-secondary rounded text-xs hover:bg-primary/10 hover:text-primary transition-colors group"
+                                          title={`${att.filename} herunterladen`}
+                                        >
+                                          <Paperclip className="w-3 h-3 text-muted-foreground group-hover:text-primary" />
+                                          <span className="truncate max-w-[150px]">{att.filename}</span>
+                                          <FileDown className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
 
                               {/* Reply Button */}
@@ -1666,6 +1886,51 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                                       onChange={(html) => setComposeForm(prev => ({ ...prev, body: html }))}
                                       placeholder="Deine Nachricht..."
                                     />
+                                  </div>
+
+                                  {/* Anhänge */}
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between">
+                                      <Label className="text-xs">Anhänge</Label>
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => attachmentInputRef.current?.click()}
+                                        className="h-7 text-xs gap-1"
+                                      >
+                                        <Paperclip className="w-3 h-3" />
+                                        Datei hinzufügen
+                                      </Button>
+                                    </div>
+                                    
+                                    {attachments.length > 0 && (
+                                      <div className="space-y-1 p-2 bg-secondary/50 rounded-lg">
+                                        {attachments.map((attachment) => (
+                                          <div key={attachment.id} className="flex items-center justify-between p-1.5 bg-background rounded border text-xs">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                              <Paperclip className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                                              <span className="truncate">{attachment.filename}</span>
+                                              <span className="text-muted-foreground flex-shrink-0">
+                                                ({formatFileSize(attachment.size)})
+                                              </span>
+                                            </div>
+                                            <Button
+                                              type="button"
+                                              variant="ghost"
+                                              size="sm"
+                                              onClick={() => removeAttachment(attachment.id)}
+                                              className="h-5 w-5 p-0 text-destructive hover:text-destructive"
+                                            >
+                                              <X className="w-3 h-3" />
+                                            </Button>
+                                          </div>
+                                        ))}
+                                        <p className="text-[10px] text-muted-foreground">
+                                          {attachments.length} Datei(en) · {formatFileSize(attachments.reduce((sum, a) => sum + a.size, 0))}
+                                        </p>
+                                      </div>
+                                    )}
                                   </div>
 
                                   <div className="space-y-2">
