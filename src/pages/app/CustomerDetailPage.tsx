@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { Fragment, useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { customersApi, projectsApi, invoicesApi } from "@/lib/apiClient";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
@@ -16,7 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X, Download, ExternalLink, Paperclip, FileDown, Send, Inbox } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X, Download, ExternalLink, Paperclip, FileDown, Send, Inbox, Loader2 } from "lucide-react";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
 
 interface EmailAttachment {
@@ -117,6 +117,9 @@ export const CustomerDetailPage = () => {
   const [notes, setNotes] = useState<Note[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [previewInvoiceUrl, setPreviewInvoiceUrl] = useState<string | null>(null);
+  const [previewInvoiceLoading, setPreviewInvoiceLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [newNoteText, setNewNoteText] = useState("");
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -179,6 +182,14 @@ export const CustomerDetailPage = () => {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [details]);
+
+  useEffect(() => {
+    return () => {
+      if (previewInvoiceUrl) {
+        URL.revokeObjectURL(previewInvoiceUrl);
+      }
+    };
+  }, [previewInvoiceUrl]);
   
   const loadData = async () => {
     if (!id) return;
@@ -264,6 +275,75 @@ export const CustomerDetailPage = () => {
       setInvoices([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInvoicePdfBlob = async (invoice: Invoice) => {
+    const token = localStorage.getItem(TOKEN_KEY);
+    const response = await fetch(`${API_CONFIG.BASE_URL}/invoices/${invoice.id}/pdf`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!response.ok) {
+      throw new Error("Download failed");
+    }
+    return response.blob();
+  };
+
+  const toggleInvoicePreview = async (invoice: Invoice) => {
+    if (!invoice.sevdesk_invoice_id) {
+      toast.error("Keine Sevdesk-Rechnung verfügbar");
+      return;
+    }
+
+    if (previewInvoiceId === invoice.id) {
+      if (previewInvoiceUrl) {
+        URL.revokeObjectURL(previewInvoiceUrl);
+      }
+      setPreviewInvoiceId(null);
+      setPreviewInvoiceUrl(null);
+      return;
+    }
+
+    setPreviewInvoiceId(invoice.id);
+    setPreviewInvoiceLoading(true);
+
+    if (previewInvoiceUrl) {
+      URL.revokeObjectURL(previewInvoiceUrl);
+      setPreviewInvoiceUrl(null);
+    }
+
+    try {
+      const blob = await fetchInvoicePdfBlob(invoice);
+      const url = window.URL.createObjectURL(blob);
+      setPreviewInvoiceUrl(url);
+    } catch (error) {
+      console.error("Failed to load invoice PDF", error);
+      toast.error("Fehler beim Laden des PDFs");
+      setPreviewInvoiceId(null);
+    } finally {
+      setPreviewInvoiceLoading(false);
+    }
+  };
+
+  const downloadInvoicePdf = async (invoice: Invoice) => {
+    if (!invoice.sevdesk_invoice_id) {
+      toast.error("Keine Sevdesk-Rechnung verfügbar");
+      return;
+    }
+
+    try {
+      const blob = await fetchInvoicePdfBlob(invoice);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Rechnung-${invoice.invoice_number || invoice.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Failed to download invoice PDF", error);
+      toast.error("Fehler beim Download");
     }
   };
 
@@ -1409,63 +1489,81 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                         </TableHeader>
                         <TableBody>
                           {invoices.map((invoice) => (
-                            <TableRow key={invoice.id}>
-                              <TableCell className="font-mono text-sm">
-                                {invoice.invoice_number || "-"}
-                              </TableCell>
-                              <TableCell className="font-medium">
-                                {formatCurrency(invoice.amount)}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={invoice.status === "PAID" ? "default" : "secondary"}>
-                                  {invoice.status}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-sm">
-                                {formatDate(invoice.created_at)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                {invoice.sevdesk_invoice_id ? (
-                                  <div className="flex items-center justify-end gap-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={async () => {
-                                        try {
-                                          const token = localStorage.getItem(TOKEN_KEY);
-                                          const response = await fetch(`${API_CONFIG.BASE_URL}/invoices/${invoice.id}/pdf`, {
-                                            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-                                          });
-                                          if (!response.ok) {
-                                            throw new Error("Download failed");
-                                          }
-                                          const blob = await response.blob();
-                                          const url = window.URL.createObjectURL(blob);
-                                          window.open(url, "_blank");
-                                          window.URL.revokeObjectURL(url);
-                                        } catch (error) {
-                                          console.error("Failed to download invoice PDF", error);
-                                        }
-                                      }}
-                                    >
-                                      <Download className="h-4 w-4 mr-1" />
-                                      PDF
-                                    </Button>
-                                    {invoice.sevdesk_invoice_url && (
+                            <Fragment key={invoice.id}>
+                              <TableRow>
+                                <TableCell className="font-mono text-sm">
+                                  {invoice.invoice_number || "-"}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {formatCurrency(invoice.amount)}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant={invoice.status === "PAID" ? "default" : "secondary"}>
+                                    {invoice.status}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-sm">
+                                  {formatDate(invoice.created_at)}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  {invoice.sevdesk_invoice_id ? (
+                                    <div className="flex items-center justify-end gap-2">
                                       <Button
-                                        variant="ghost"
+                                        variant="outline"
                                         size="sm"
-                                        onClick={() => window.open(invoice.sevdesk_invoice_url, "_blank")}
+                                        onClick={() => toggleInvoicePreview(invoice)}
                                       >
-                                        <ExternalLink className="h-4 w-4" />
+                                        <FileText className="h-4 w-4 mr-1" />
+                                        {previewInvoiceId === invoice.id ? "Schliessen" : "Ansehen"}
                                       </Button>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => downloadInvoicePdf(invoice)}
+                                      >
+                                        <Download className="h-4 w-4 mr-1" />
+                                        Download
+                                      </Button>
+                                      {invoice.sevdesk_invoice_url && (
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          onClick={() => window.open(invoice.sevdesk_invoice_url, "_blank")}
+                                        >
+                                          <ExternalLink className="h-4 w-4" />
+                                        </Button>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-muted-foreground text-xs">-</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                              {previewInvoiceId === invoice.id && (
+                                <TableRow>
+                                  <TableCell colSpan={5} className="bg-muted/20">
+                                    {previewInvoiceLoading ? (
+                                      <div className="flex items-center justify-center py-10 text-muted-foreground">
+                                        <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                                        PDF wird geladen...
+                                      </div>
+                                    ) : previewInvoiceUrl ? (
+                                      <div className="w-full h-[70vh]">
+                                        <iframe
+                                          title={`Rechnung ${invoice.invoice_number || invoice.id}`}
+                                          src={previewInvoiceUrl}
+                                          className="w-full h-full rounded-md border"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="text-sm text-muted-foreground py-6 text-center">
+                                        PDF nicht verfuegbar
+                                      </div>
                                     )}
-                                  </div>
-                                ) : (
-                                  <span className="text-muted-foreground text-xs">-</span>
-                                )}
-                              </TableCell>
-                            </TableRow>
+                                  </TableCell>
+                                </TableRow>
+                              )}
+                            </Fragment>
                           ))}
                         </TableBody>
                       </Table>
