@@ -401,6 +401,10 @@ export const projectsApi = {
     return fetchApi<Project[]>(`/projects${query}`);
   },
 
+  async getArchivedProjects(): Promise<Project[]> {
+    return fetchApi<Project[]>("/projects/archive");
+  },
+
   async getProject(id: string): Promise<Project> {
     return fetchApi<Project>(`/projects/${id}`);
   },

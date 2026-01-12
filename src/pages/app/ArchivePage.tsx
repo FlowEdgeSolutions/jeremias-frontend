@@ -33,12 +33,8 @@ export const ArchivePage = () => {
   const loadProjects = async () => {
     try {
       setLoading(true);
-      const data = await projectsApi.getProjects();
-      // Filtere nur freigegebene Projekte (qc_status = APPROVED)
-      const archivedProjects = data.filter(p => 
-        p.qc_status === "APPROVED" || p.qcStatus === "APPROVED"
-      );
-      setProjects(archivedProjects);
+      const data = await projectsApi.getArchivedProjects();
+      setProjects(data);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
       toast.error("Fehler beim Laden: " + message);
