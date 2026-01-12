@@ -104,10 +104,10 @@ export interface Invoice {
   paid_at?: string;
   created_at: string;
   updated_at?: string;
-  // Stripe Invoice für PDF
-  stripe_invoice_id?: string;
-  stripe_invoice_pdf_url?: string;
-  stripe_hosted_invoice_url?: string;
+  // Sevdesk Invoice for PDF/Link
+  sevdesk_invoice_id?: string;
+  sevdesk_invoice_pdf_url?: string;
+  sevdesk_invoice_url?: string;
   // Legacy frontend fields for compatibility
   customerId?: string;
   projectId?: string;

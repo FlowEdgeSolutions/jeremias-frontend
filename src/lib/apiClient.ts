@@ -562,86 +562,6 @@ export const usersApi = {
 // ============================================================================
 
 // ============================================================================
-// PAYMENTS API (Stripe)
-// ============================================================================
-
-export type PaymentStatus = "PENDING" | "COMPLETED" | "FAILED" | "REFUNDED" | "CANCELLED";
-
-export interface Payment {
-  id: string;
-  customer_id: string;
-  project_id?: string;
-  invoice_id?: string;
-  stripe_payment_intent_id?: string;
-  stripe_checkout_session_id?: string;
-  amount: number;
-  currency: string;
-  status: PaymentStatus;
-  description?: string;
-  product_name?: string;
-  payment_method?: string;
-  receipt_url?: string;
-  created_at: string;
-  paid_at?: string;
-}
-
-export interface PaymentSummary {
-  total_revenue: number;
-  total_pending: number;
-  total_refunded: number;
-  completed_count: number;
-  pending_count: number;
-  failed_count: number;
-}
-
-export interface CheckoutSessionRequest {
-  customer_id: string;
-  project_id?: string;
-  product_name: string;
-  amount: number;
-  success_url: string;
-  cancel_url: string;
-}
-
-export interface CheckoutSessionResponse {
-  checkout_url: string;
-  session_id: string;
-}
-
-export interface StripeConfig {
-  publishable_key: string;
-}
-
-export const paymentsApi = {
-  async getPayments(customerId?: string, status?: PaymentStatus): Promise<Payment[]> {
-    const params = new URLSearchParams();
-    if (customerId) params.append("customer_id", customerId);
-    if (status) params.append("status_filter", status);
-    const query = params.toString() ? `?${params.toString()}` : "";
-    return fetchApi<Payment[]>(`/payments${query}`);
-  },
-
-  async getPayment(id: string): Promise<Payment> {
-    return fetchApi<Payment>(`/payments/${id}`);
-  },
-
-  async getSummary(): Promise<PaymentSummary> {
-    return fetchApi<PaymentSummary>("/payments/summary");
-  },
-
-  async getStripeConfig(): Promise<StripeConfig> {
-    return fetchApi<StripeConfig>("/payments/config");
-  },
-
-  async createCheckoutSession(data: CheckoutSessionRequest): Promise<CheckoutSessionResponse> {
-    return fetchApi<CheckoutSessionResponse>("/payments/checkout", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-};
-
-// ============================================================================
 // CUSTOMER PORTAL API
 // ============================================================================
 
@@ -671,12 +591,15 @@ export interface CustomerProject {
 
 export interface CustomerInvoice {
   id: string;
+  invoice_number?: string;
   amount: number;
   currency: string;
   status: string;
   due_date: string | null;
   paid_at: string | null;
   created_at: string;
+  pdf_url?: string | null;
+  sevdesk_invoice_url?: string | null;
 }
 
 export interface CustomerProfileUpdate {
@@ -710,11 +633,6 @@ export const customerPortalApi = {
     });
   },
 
-  async createPaymentSession(invoiceId: string): Promise<{ checkout_url: string; invoice_id: string }> {
-    return fetchApi<{ checkout_url: string; invoice_id: string }>(`/customer/invoices/${invoiceId}/pay`, {
-      method: "POST",
-    });
-  },
 };
 
 export const apiClient = {
@@ -726,7 +644,6 @@ export const apiClient = {
   messages: messagesApi,
   qc: qcApi,
   users: usersApi,
-  payments: paymentsApi,
   customerPortal: customerPortalApi,
 };
 

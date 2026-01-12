@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { customerPortalApi, CustomerInvoice } from "@/lib/apiClient";
+import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Loader2, CreditCard } from "lucide-react";
+import { Loader2, Download } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -35,7 +36,6 @@ export const PortalInvoicesPage = () => {
   const [invoices, setInvoices] = useState<CustomerInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null);
 
   useEffect(() => {
     loadInvoices();
@@ -55,16 +55,23 @@ export const PortalInvoicesPage = () => {
     }
   };
 
-  const handlePay = async (invoiceId: string) => {
+  const handleOpenPdf = async (invoice: CustomerInvoice) => {
+    if (!invoice.pdf_url) return;
     try {
-      setPayingInvoiceId(invoiceId);
-      const result = await customerPortalApi.createPaymentSession(invoiceId);
-      // Redirect to Stripe checkout
-      window.location.href = result.checkout_url;
+      const token = localStorage.getItem(TOKEN_KEY);
+      const response = await fetch(`${API_CONFIG.BASE_URL}${invoice.pdf_url}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) {
+        throw new Error("Download failed");
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error("Failed to create payment session:", err);
-      toast.error("Fehler beim Erstellen der Zahlungssitzung");
-      setPayingInvoiceId(null);
+      console.error("Failed to open invoice PDF:", err);
+      toast.error("Fehler beim Öffnen der Rechnung");
     }
   };
 
@@ -132,7 +139,7 @@ export const PortalInvoicesPage = () => {
               {invoices.map((invoice) => (
                 <TableRow key={invoice.id}>
                   <TableCell className="font-medium whitespace-nowrap">
-                    {invoice.id.slice(0, 8)}...
+                    {invoice.invoice_number || `${invoice.id.slice(0, 8)}...`}
                   </TableCell>
                   <TableCell className="text-right font-medium whitespace-nowrap">
                     {invoice.amount.toLocaleString("de-DE")} {invoice.currency}
@@ -155,21 +162,13 @@ export const PortalInvoicesPage = () => {
                     }
                   </TableCell>
                   <TableCell>
-                    {(invoice.status === "SENT" || invoice.status === "OVERDUE") && (
-                      <Button 
-                        size="sm" 
-                        onClick={() => handlePay(invoice.id)}
-                        disabled={payingInvoiceId === invoice.id}
-                      >
-                        {payingInvoiceId === invoice.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <>
-                            <CreditCard className="h-4 w-4 mr-2" />
-                            Bezahlen
-                          </>
-                        )}
+                    {invoice.pdf_url ? (
+                      <Button size="sm" onClick={() => handleOpenPdf(invoice)}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Rechnung
                       </Button>
+                    ) : (
+                      <span className="text-muted-foreground text-xs">-</span>
                     )}
                   </TableCell>
                 </TableRow>

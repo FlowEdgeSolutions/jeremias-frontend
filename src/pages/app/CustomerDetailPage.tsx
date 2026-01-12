@@ -1425,21 +1425,37 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                                 {formatDate(invoice.created_at)}
                               </TableCell>
                               <TableCell className="text-right">
-                                {invoice.stripe_invoice_pdf_url ? (
+                                {invoice.sevdesk_invoice_id ? (
                                   <div className="flex items-center justify-end gap-2">
                                     <Button
                                       variant="outline"
                                       size="sm"
-                                      onClick={() => window.open(invoice.stripe_invoice_pdf_url, "_blank")}
+                                      onClick={async () => {
+                                        try {
+                                          const token = localStorage.getItem(TOKEN_KEY);
+                                          const response = await fetch(`${API_CONFIG.BASE_URL}/invoices/${invoice.id}/pdf`, {
+                                            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+                                          });
+                                          if (!response.ok) {
+                                            throw new Error("Download failed");
+                                          }
+                                          const blob = await response.blob();
+                                          const url = window.URL.createObjectURL(blob);
+                                          window.open(url, "_blank");
+                                          window.URL.revokeObjectURL(url);
+                                        } catch (error) {
+                                          console.error("Failed to download invoice PDF", error);
+                                        }
+                                      }}
                                     >
                                       <Download className="h-4 w-4 mr-1" />
                                       PDF
                                     </Button>
-                                    {invoice.stripe_hosted_invoice_url && (
+                                    {invoice.sevdesk_invoice_url && (
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => window.open(invoice.stripe_hosted_invoice_url, "_blank")}
+                                        onClick={() => window.open(invoice.sevdesk_invoice_url, "_blank")}
                                       >
                                         <ExternalLink className="h-4 w-4" />
                                       </Button>
