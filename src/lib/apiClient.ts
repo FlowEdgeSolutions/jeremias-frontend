@@ -423,6 +423,12 @@ export const projectsApi = {
     });
   },
 
+  async deleteProject(id: string): Promise<void> {
+    return fetchApi<void>(`/projects/${id}`, {
+      method: "DELETE",
+    });
+  },
+
   async setStatus(id: string, status: ProjectStatus): Promise<Project> {
     return fetchApi<Project>(`/projects/${id}/set-status`, {
       method: "POST",

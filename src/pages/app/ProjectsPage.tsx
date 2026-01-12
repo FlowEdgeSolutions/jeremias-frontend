@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import type { MouseEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Project, ProjectStatus, User } from "@/types";
 import { apiClient } from "@/lib/apiClient";
@@ -15,7 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 
 const statusLabels: Record<ProjectStatus, string> = {
   NEU: "Neu",
@@ -53,6 +54,23 @@ export const ProjectsPage = () => {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
       toast.error("Fehler beim Laden der Projekte: " + message);
+    }
+  };
+
+  const handleDeleteProject = async (event: MouseEvent<HTMLButtonElement>, projectId: string) => {
+    event.stopPropagation();
+
+    if (!window.confirm("Projekt wirklich loeschen?")) {
+      return;
+    }
+
+    try {
+      await apiClient.projects.deleteProject(projectId);
+      setProjects((prev) => prev.filter((project) => project.id !== projectId));
+      toast.success("Projekt geloescht");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Loeschen: " + message);
     }
   };
 
@@ -121,9 +139,22 @@ export const ProjectsPage = () => {
             <div>
               <div className="flex items-center justify-between">
                 <h4 className="font-semibold text-foreground">{project.product_name}</h4>
-                {project.project_number && (
-                  <span className="text-xs text-muted-foreground">{project.project_number}</span>
-                )}
+                <div className="flex items-center gap-2">
+                  {project.project_number && (
+                    <span className="text-xs text-muted-foreground">{project.project_number}</span>
+                  )}
+                  {currentUser?.role && ["admin", "sales"].includes(currentUser.role) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={(event) => handleDeleteProject(event, project.id)}
+                      title="Projekt loeschen"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
               </div>
               <p className="text-sm text-muted-foreground mt-1">
                 Kunde #{project.customer_id.slice(0, 8)}
