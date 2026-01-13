@@ -38,8 +38,17 @@ export const ArchivePage = () => {
       const data = await projectsApi.getArchivedProjects();
       setProjects(data);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler beim Laden: " + message);
+      // Fallback: falls /projects/archive nicht funktioniert, versuche /projects?status=ARCHIV&exclude_archived=false
+      try {
+        const fallback = await projectsApi.getProjects({ status: "ARCHIV" as any, exclude_archived: false });
+        setProjects(fallback);
+        if (fallback.length === 0) {
+          toast.info("Keine archivierten Projekte gefunden");
+        }
+      } catch (e2: unknown) {
+        const message = e2 instanceof Error ? e2.message : "Unbekannter Fehler";
+        toast.error("Fehler beim Laden: " + message);
+      }
     } finally {
       setLoading(false);
     }

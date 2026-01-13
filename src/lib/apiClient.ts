@@ -343,6 +343,7 @@ export interface ProjectFilters {
   status?: ProjectStatus;
   customer_id?: string;
   assigned_to?: string;
+  exclude_archived?: boolean; // when true (default server behavior) archived are excluded; set to false to include
 }
 
 export interface ProjectCreateRequest {
@@ -396,6 +397,7 @@ export const projectsApi = {
     if (filters?.status) params.append("status", filters.status);
     if (filters?.customer_id) params.append("customer_id", filters.customer_id);
     if (filters?.assigned_to) params.append("assigned_to", filters.assigned_to);
+    if (typeof filters?.exclude_archived === "boolean") params.append("exclude_archived", String(filters.exclude_archived));
 
     const query = params.toString() ? `?${params.toString()}` : "";
     return fetchApi<Project[]>(`/projects${query}`);
