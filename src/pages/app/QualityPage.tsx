@@ -13,6 +13,13 @@ export const QualityPage = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
+  const formatErrorMessage = (error: unknown) => {
+    const err = error as { status?: number; message?: string };
+    const message = err?.message || "Unbekannter Fehler";
+    const status = typeof err?.status === "number" && err.status > 0 ? ` (HTTP ${err.status})` : "";
+    return `Fehler${status}: ${message}`;
+  };
+
   useEffect(() => {
     loadProjects();
   }, []);
@@ -23,8 +30,7 @@ export const QualityPage = () => {
       const data = await qcApi.getQcProjects("PENDING");
       setProjects(data);
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler beim Laden: " + message);
+      toast.error("Fehler beim Laden: " + formatErrorMessage(error));
     } finally {
       setLoading(false);
     }
@@ -40,8 +46,7 @@ export const QualityPage = () => {
       toast.success("Projekt freigegeben!");
       loadProjects();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler: " + message);
+      toast.error(formatErrorMessage(error));
     }
   };
 
@@ -51,8 +56,7 @@ export const QualityPage = () => {
       toast.info("Projekt zurück in Revision geschickt");
       loadProjects();
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler: " + message);
+      toast.error(formatErrorMessage(error));
     }
   };
 

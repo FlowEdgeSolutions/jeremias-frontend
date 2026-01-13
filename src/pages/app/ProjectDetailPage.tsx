@@ -143,6 +143,13 @@ export const ProjectDetailPage = () => {
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
 
+  const formatErrorMessage = (error: unknown) => {
+    const err = error as { status?: number; message?: string };
+    const message = err?.message || "Unbekannter Fehler";
+    const status = typeof err?.status === "number" && err.status > 0 ? ` (HTTP ${err.status})` : "";
+    return `Fehler${status}: ${message}`;
+  };
+
   useEffect(() => {
     if (!id) return;
     loadProject();
@@ -772,8 +779,7 @@ export const ProjectDetailPage = () => {
       toast.success("Projekt freigegeben und ins Archiv verschoben!");
       loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler: " + message);
+      toast.error(formatErrorMessage(error));
     }
   };
 
@@ -790,8 +796,7 @@ export const ProjectDetailPage = () => {
       toast.info("Projekt zurück in Revision geschickt");
       loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler: " + message);
+      toast.error(formatErrorMessage(error));
     }
   };
 
