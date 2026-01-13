@@ -546,6 +546,35 @@ export const qcApi = {
 };
 
 // ============================================================================
+// SEVDESK API (Tools)
+// ============================================================================
+
+export interface SevdeskContactCategory {
+  id: string | null;
+  name?: string;
+}
+
+export const sevdeskApi = {
+  async listContactCategories(): Promise<SevdeskContactCategory[]> {
+    const response = await fetchApi<{ categories: SevdeskContactCategory[] }>(
+      "/tools/sevdesk/contact-categories"
+    );
+    return response.categories || [];
+  },
+
+  async createContactCategory(name: string): Promise<SevdeskContactCategory> {
+    const response = await fetchApi<{ category: SevdeskContactCategory }>(
+      "/tools/sevdesk/contact-categories",
+      {
+        method: "POST",
+        body: JSON.stringify({ name }),
+      }
+    );
+    return response.category;
+  },
+};
+
+// ============================================================================
 // USERS API (Employees)
 // ============================================================================
 
@@ -659,6 +688,7 @@ export const apiClient = {
   invoices: invoicesApi,
   messages: messagesApi,
   qc: qcApi,
+  sevdesk: sevdeskApi,
   users: usersApi,
   customerPortal: customerPortalApi,
 };

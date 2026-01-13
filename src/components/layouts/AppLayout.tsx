@@ -19,6 +19,7 @@ import {
   Mail,
   Archive,
   UsersRound,
+  Settings,
   LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -94,6 +95,7 @@ export const AppLayout = () => {
       category: "Administration",
       items: [
         { path: "/app/users", label: "Accounts", icon: UsersRound },
+        { path: "/app/settings", label: "Einstellungen", icon: Settings },
       ]
     }] : []),
   ];
