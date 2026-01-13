@@ -207,6 +207,11 @@ export const ProjectDetailPage = () => {
 
   const loadProject = async () => {
     if (!id) return;
+    const isUuidLike = /^[0-9a-fA-F-]{32,36}$/.test(id);
+    if (!isUuidLike) {
+      toast.error("Fehler beim Laden: Ungültige Projekt-ID");
+      return;
+    }
     
     try {
       setLoading(true);
@@ -754,6 +759,11 @@ export const ProjectDetailPage = () => {
 
   const handleApprove = async () => {
     if (!id) return;
+    const isUuidLike = /^[0-9a-fA-F-]{32,36}$/.test(id);
+    if (!isUuidLike) {
+      toast.error("Ungültige Projekt-ID");
+      return;
+    }
     
     try {
       await qcApi.approveProject(id);
@@ -767,6 +777,11 @@ export const ProjectDetailPage = () => {
 
   const handleReject = async () => {
     if (!id) return;
+    const isUuidLike = /^[0-9a-fA-F-]{32,36}$/.test(id);
+    if (!isUuidLike) {
+      toast.error("Ungültige Projekt-ID");
+      return;
+    }
     
     try {
       await qcApi.rejectProject(id);

@@ -94,7 +94,14 @@ export const ArchivePage = () => {
           <Card 
             key={project.id}
             className="cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => navigate(`/app/projects/${project.id}`)}
+            onClick={() => {
+              const pid = (project as any)?.id || (project as any)?.project_id || (project as any)?.projectId;
+              if (!pid || typeof pid !== "string") {
+                toast.error("Ungültige Projekt-ID");
+                return;
+              }
+              navigate(`/app/projects/${pid}`);
+            }}
           >
             <CardHeader>
               <CardTitle className="text-lg">{project.product_name || project.productName}</CardTitle>

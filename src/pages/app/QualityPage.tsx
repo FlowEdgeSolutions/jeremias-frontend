@@ -32,6 +32,10 @@ export const QualityPage = () => {
 
   const handleApprove = async (projectId: string) => {
     try {
+      if (!projectId || typeof projectId !== "string") {
+        toast.error("Ungültige Projekt-ID");
+        return;
+      }
       await qcApi.approveProject(projectId);
       toast.success("Projekt freigegeben!");
       loadProjects();
@@ -69,7 +73,17 @@ export const QualityPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {pendingProjects.map((project) => (
           <Card key={project.id}>
-            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => navigate(`/app/projects/${project.id}`)}>
+            <CardHeader
+              className="cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => {
+                const pid = (project as any)?.id || (project as any)?.project_id || (project as any)?.projectId;
+                if (!pid || typeof pid !== "string") {
+                  toast.error("Ungültige Projekt-ID");
+                  return;
+                }
+                navigate(`/app/projects/${pid}`);
+              }}
+            >
               <CardTitle className="text-lg text-primary hover:underline">{project.product_name || project.productName}</CardTitle>
               <p className="text-sm text-muted-foreground">{project.customerName}</p>
             </CardHeader>
