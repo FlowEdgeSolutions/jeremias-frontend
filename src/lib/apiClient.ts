@@ -496,6 +496,10 @@ export const invoicesApi = {
   async getSummary(): Promise<InvoiceSummary> {
     return fetchApi<InvoiceSummary>("/invoices/summary");
   },
+
+  async deleteInvoice(id: string): Promise<void> {
+    await fetchApi<void>(`/invoices/${id}`, { method: "DELETE" });
+  },
 };
 
 // ============================================================================

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Invoice, InvoiceStatus } from "@/types";
 import { invoicesApi, usersApi, EmployeeCredits } from "@/lib/apiClient";
 import { StatCard } from "@/components/common";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -13,10 +14,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Euro, TrendingUp, AlertCircle, FileText, Star, Users, CheckCircle, Clock } from "lucide-react";
+import { Euro, TrendingUp, AlertCircle, FileText, Star, Users, CheckCircle, Clock, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const invoiceStatusLabels: Record<InvoiceStatus, string> = {
   DRAFT: "Entwurf",
@@ -72,6 +74,7 @@ export const FinancePage = () => {
   const [employeeCredits, setEmployeeCredits] = useState<EmployeeCredits[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
+  const { currentUser } = useAuth();
 
   useEffect(() => {
     loadData();
@@ -107,6 +110,21 @@ export const FinancePage = () => {
   const paidCount = invoices.filter(inv => inv.status === "PAID").length;
   const draftCount = invoices.filter(inv => inv.status === "DRAFT").length;
   const totalCredits = employeeCredits.reduce((sum, emp) => sum + emp.total_credits, 0);
+
+  const canManageInvoices = currentUser?.role && ["admin", "sales"].includes(currentUser.role);
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    const confirmed = window.confirm("Rechnung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.");
+    if (!confirmed) return;
+    try {
+      await invoicesApi.deleteInvoice(invoiceId);
+      setInvoices(prev => prev.filter(i => i.id !== invoiceId));
+      toast.success("Rechnung gelöscht");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Löschen fehlgeschlagen: " + message);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -401,6 +419,7 @@ export const FinancePage = () => {
                       <TableHead>Status</TableHead>
                       <TableHead>Fällig am</TableHead>
                       <TableHead>Bezahlt am</TableHead>
+                      {canManageInvoices && <TableHead className="text-right">Aktionen</TableHead>}
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -436,6 +455,19 @@ export const FinancePage = () => {
                               ? format(new Date(invoice.paid_at || invoice.paidAt!), "dd.MM.yyyy", { locale: de })
                               : "-"}
                           </TableCell>
+                          {canManageInvoices && (
+                            <TableCell className="text-right">
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-8"
+                                onClick={() => handleDeleteInvoice(invoice.id)}
+                                title="Rechnung löschen"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          )}
                         </TableRow>
                       ))
                     )}

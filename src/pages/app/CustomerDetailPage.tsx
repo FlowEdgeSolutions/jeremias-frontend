@@ -18,6 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Edit, List, PhoneCall, Star, UserCheck, Users, Mic, MicOff, Activity, TrendingUp, TrendingDown, Clock, Mail, Reply, FileText, DollarSign, MessageSquare, X, Download, ExternalLink, Paperclip, FileDown, Send, Inbox, Loader2 } from "lucide-react";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface EmailAttachment {
   id: string;
@@ -112,6 +113,7 @@ const STAGE_ICON_COLORS: Record<PipelineStage, string> = {
 export const CustomerDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   
   const [details, setDetails] = useState<CustomerDetails | null>(null);
   const [notes, setNotes] = useState<Note[]>([]);
@@ -162,6 +164,7 @@ export const CustomerDetailPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showComposeBox, setShowComposeBox] = useState(false);
   const [emailAccounts, setEmailAccounts] = useState<Array<{ id: string; email: string; provider: string; is_primary: boolean }>>([]);
+  const canManageInvoices = currentUser?.role && ["admin", "sales"].includes(currentUser.role);
   
   useEffect(() => {
     console.log("CustomerDetailPage mounted, ID:", id);
@@ -344,6 +347,26 @@ export const CustomerDetailPage = () => {
     } catch (error) {
       console.error("Failed to download invoice PDF", error);
       toast.error("Fehler beim Download");
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string) => {
+    const confirmed = window.confirm("Rechnung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.");
+    if (!confirmed) return;
+    try {
+      await invoicesApi.deleteInvoice(invoiceId);
+      setInvoices(prev => prev.filter(i => i.id !== invoiceId));
+      if (previewInvoiceId === invoiceId) {
+        setPreviewInvoiceId(null);
+        if (previewInvoiceUrl) {
+          URL.revokeObjectURL(previewInvoiceUrl);
+          setPreviewInvoiceUrl(null);
+        }
+      }
+      toast.success("Rechnung gelöscht");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Löschen fehlgeschlagen: " + message);
     }
   };
 
@@ -1485,6 +1508,9 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                             <TableHead>Status</TableHead>
                             <TableHead>Datum</TableHead>
                             <TableHead className="text-right">Rechnung</TableHead>
+                            {canManageInvoices && (
+                              <TableHead className="text-right">Aktionen</TableHead>
+                            )}
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -1538,10 +1564,22 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                                     <span className="text-muted-foreground text-xs">-</span>
                                   )}
                                 </TableCell>
+                                {canManageInvoices && (
+                                  <TableCell className="text-right">
+                                    <Button
+                                      variant="destructive"
+                                      size="sm"
+                                      title="Rechnung löschen"
+                                      onClick={() => handleDeleteInvoice(invoice.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TableCell>
+                                )}
                               </TableRow>
                               {previewInvoiceId === invoice.id && (
                                 <TableRow>
-                                  <TableCell colSpan={5} className="bg-muted/20">
+                                  <TableCell colSpan={canManageInvoices ? 6 : 5} className="bg-muted/20">
                                     {previewInvoiceLoading ? (
                                       <div className="flex items-center justify-center py-10 text-muted-foreground">
                                         <Loader2 className="h-5 w-5 animate-spin mr-2" />
