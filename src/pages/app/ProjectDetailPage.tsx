@@ -793,6 +793,24 @@ export const ProjectDetailPage = () => {
     }
   };
 
+  const handleDeleteProject = async () => {
+    if (!id) return;
+    const isUuidLike = /^[0-9a-fA-F-]{32,36}$/.test(id);
+    if (!isUuidLike) {
+      toast.error("Ungültige Projekt-ID");
+      return;
+    }
+    if (!window.confirm("Projekt wirklich löschen?")) return;
+    try {
+      await projectsApi.deleteProject(id);
+      toast.success("Projekt gelöscht");
+      navigate('/app/projects');
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Löschen: " + message);
+    }
+  };
+
   const formatNoteDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -910,6 +928,13 @@ export const ProjectDetailPage = () => {
                 </Button>
               </>
             )}
+
+            {/* Admin/Sales: Projekt löschen */}
+            <div className="ml-2">
+              <Button variant="ghost" size="sm" onClick={handleDeleteProject} title="Projekt löschen">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
             
             <div>
               <h1 className="text-3xl font-bold">{project.product_name}</h1>
