@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { projectsApi, customersApi, qcApi } from "@/lib/apiClient";
 import type { ProjectUpdateRequest } from "@/lib/apiClient";
 import { Project, Customer, ProjectStatus, User } from "@/types";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -77,6 +78,7 @@ const STATUS_COLORS: Record<ProjectStatus, string> = {
 export const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { currentUser } = useAuth();
   
   const [project, setProject] = useState<Project | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -806,8 +808,13 @@ export const ProjectDetailPage = () => {
       toast.success("Projekt gelöscht");
       navigate('/app/projects');
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler beim Löschen: " + message);
+      const err = error as any;
+      const message = err instanceof Error ? err.message : "Unbekannter Fehler";
+      if (err?.status === 403) {
+        toast.error("Zugriff verweigert. Du brauchst die Rolle 'admin' oder 'sales' zum Löschen.");
+      } else {
+        toast.error("Fehler beim Löschen: " + message);
+      }
     }
   };
 
@@ -930,11 +937,13 @@ export const ProjectDetailPage = () => {
             )}
 
             {/* Admin/Sales: Projekt löschen */}
-            <div className="ml-2">
-              <Button variant="ghost" size="sm" onClick={handleDeleteProject} title="Projekt löschen">
-                <Trash2 className="h-4 w-4" />
-              </Button>
-            </div>
+            {currentUser?.role && ["admin", "sales"].includes(currentUser.role) && (
+              <div className="ml-2">
+                <Button variant="ghost" size="sm" onClick={handleDeleteProject} title="Projekt löschen">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
             
             <div>
               <h1 className="text-3xl font-bold">{project.product_name}</h1>

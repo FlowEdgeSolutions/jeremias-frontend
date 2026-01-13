@@ -71,8 +71,13 @@ export const ProjectsPage = () => {
       setProjects((prev) => prev.filter((project) => project.id !== projectId));
       toast.success("Projekt geloescht");
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
-      toast.error("Fehler beim Loeschen: " + message);
+      const err = error as any;
+      const message = err instanceof Error ? err.message : "Unbekannter Fehler";
+      if (err?.status === 403) {
+        toast.error("Zugriff verweigert. Du brauchst die Rolle 'admin' oder 'sales' zum Löschen.");
+      } else {
+        toast.error("Fehler beim Loeschen: " + message);
+      }
     }
   };
 
