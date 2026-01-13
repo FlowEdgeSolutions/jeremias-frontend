@@ -12,6 +12,7 @@ export type ProjectStatus =
   | "IN_BEARBEITUNG" 
   | "REVISION" 
   | "FERTIGGESTELLT" 
+  | "ARCHIV"
   | "PROBLEM";
 
 export type QcStatus = "PENDING" | "APPROVED" | "REJECTED";

@@ -23,6 +23,7 @@ const statusLabels: Record<ProjectStatus, string> = {
   IN_BEARBEITUNG: "In Bearbeitung",
   REVISION: "Revision",
   FERTIGGESTELLT: "Fertiggestellt",
+  ARCHIV: "Archiviert",
   PROBLEM: "Problem",
 };
 
@@ -31,6 +32,7 @@ const statusColors: Record<ProjectStatus, string> = {
   IN_BEARBEITUNG: "bg-info text-info-foreground",
   REVISION: "bg-warning text-warning-foreground",
   FERTIGGESTELLT: "bg-success text-success-foreground",
+  ARCHIV: "bg-muted text-foreground",
   PROBLEM: "bg-destructive text-destructive-foreground",
 };
 
