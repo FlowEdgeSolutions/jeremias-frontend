@@ -1,8 +1,8 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { projectsApi, customersApi, qcApi } from "@/lib/apiClient";
+import { projectsApi, customersApi, invoicesApi, qcApi } from "@/lib/apiClient";
 import type { ProjectUpdateRequest } from "@/lib/apiClient";
-import { Project, Customer, ProjectStatus, User } from "@/types";
+import { Project, Customer, ProjectStatus, User, Invoice } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Upload, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox } from "lucide-react";
+import { ArrowLeft, Save, Upload, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox, Eye, ExternalLink } from "lucide-react";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 
@@ -83,6 +83,9 @@ export const ProjectDetailPage = () => {
   const [project, setProject] = useState<Project | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
   const [loading, setLoading] = useState(true);
+  const [projectInvoice, setProjectInvoice] = useState<Invoice | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [qcActionLoading, setQcActionLoading] = useState(false);
   
   // Editable fields
   const [projectNumber, setProjectNumber] = useState("");
@@ -250,11 +253,66 @@ export const ProjectDetailPage = () => {
       // Check if product allows custom credits
       const creditsAllowedProducts = ["HEIZLAST", "HEIZLAST_HYDRAULISCH", "ISFP_ERSTELLUNG", "INDIVIDUELL"];
       setAllowCustomCredits(creditsAllowedProducts.includes(projectData.product_code));
+
+      // Load invoice for this project (if available)
+      try {
+        setInvoiceLoading(true);
+        const invoices = await invoicesApi.getInvoices({ customer_id: projectData.customer_id });
+        const inv = invoices.find((i) => (i.project_id || i.projectId) === projectData.id) || null;
+        setProjectInvoice(inv);
+      } catch (err) {
+        console.error("Failed to load project invoice:", err);
+        setProjectInvoice(null);
+      } finally {
+        setInvoiceLoading(false);
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
       toast.error("Fehler beim Laden: " + message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInvoicePdfBlob = async (invoice: Invoice): Promise<Blob> => {
+    if (!invoice.sevdesk_invoice_id) {
+      throw new Error("Keine Sevdesk-Rechnung verfügbar");
+    }
+    const response = await fetch(`${API_CONFIG.BASE_URL}/invoices/${invoice.id}/pdf`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}` },
+    });
+    if (!response.ok) {
+      throw new Error(`PDF konnte nicht geladen werden (HTTP ${response.status})`);
+    }
+    return response.blob();
+  };
+
+  const openInvoicePdf = async (invoice: Invoice) => {
+    try {
+      const blob = await fetchInvoicePdfBlob(invoice);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error(message);
+    }
+  };
+
+  const downloadInvoicePdf = async (invoice: Invoice) => {
+    try {
+      const blob = await fetchInvoicePdfBlob(invoice);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Rechnung-${invoice.invoice_number || invoice.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error(message);
     }
   };
 
@@ -775,11 +833,14 @@ export const ProjectDetailPage = () => {
     }
     
     try {
+      setQcActionLoading(true);
       await qcApi.approveProject(id);
       toast.success("Projekt freigegeben und ins Archiv verschoben!");
       loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
     } catch (error: unknown) {
       toast.error(formatErrorMessage(error));
+    } finally {
+      setQcActionLoading(false);
     }
   };
 
@@ -792,11 +853,14 @@ export const ProjectDetailPage = () => {
     }
     
     try {
+      setQcActionLoading(true);
       await qcApi.rejectProject(id);
       toast.info("Projekt zurück in Revision geschickt");
       loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
     } catch (error: unknown) {
       toast.error(formatErrorMessage(error));
+    } finally {
+      setQcActionLoading(false);
     }
   };
 
@@ -926,17 +990,19 @@ export const ProjectDetailPage = () => {
                   className="bg-success hover:bg-success/90 text-success-foreground"
                   onClick={handleApprove}
                   size="sm"
+                  disabled={qcActionLoading}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Freigeben
+                  {qcActionLoading ? "Freigeben..." : "Freigeben"}
                 </Button>
                 <Button
                   variant="destructive"
                   onClick={handleReject}
                   size="sm"
+                  disabled={qcActionLoading}
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  Revision
+                  {qcActionLoading ? "Revision..." : "Revision"}
                 </Button>
               </>
             )}
@@ -1010,6 +1076,38 @@ export const ProjectDetailPage = () => {
                 <p className="text-xs text-muted-foreground mt-1">
                   Automatisch generiert
                 </p>
+              </div>
+
+              <div>
+                <Label>Rechnung (Sevdesk)</Label>
+                {invoiceLoading ? (
+                  <p className="text-sm text-muted-foreground mt-1">Lade Rechnung...</p>
+                ) : !projectInvoice ? (
+                  <p className="text-sm text-muted-foreground mt-1">Keine Rechnung vorhanden</p>
+                ) : projectInvoice.sevdesk_invoice_id ? (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <Button size="sm" variant="outline" onClick={() => openInvoicePdf(projectInvoice)}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Ansehen
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => downloadInvoicePdf(projectInvoice)}>
+                      <FileDown className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                    {projectInvoice.sevdesk_invoice_url && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => window.open(projectInvoice.sevdesk_invoice_url!, "_blank")}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Sevdesk
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-1">Keine Sevdesk-Rechnung verfügbar</p>
+                )}
               </div>
               
               <div>

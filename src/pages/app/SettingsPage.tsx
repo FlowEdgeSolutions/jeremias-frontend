@@ -162,7 +162,7 @@ export const SettingsPage = () => {
               <div className="mt-1 font-medium text-foreground">
                 {projectInfo.product_name || projectInfo.productName} ({projectInfo.project_number || "-"})
               </div>
-              <div className="mt-1 font-mono text-xs text-muted-foreground">{projectInfo.id}</div>
+              <div className="mt-1 font-mono text-xs text-muted-foreground break-all">{projectInfo.id}</div>
             </div>
           )}
         </CardContent>
@@ -200,7 +200,7 @@ export const SettingsPage = () => {
                 {loading ? "Lade..." : "Aktualisieren"}
               </Button>
             </div>
-            <div className="border rounded-md">
+            <div className="border rounded-md overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -221,11 +221,11 @@ export const SettingsPage = () => {
                         Keine Kategorien gefunden.
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    categories.map((category, index) => (
-                      <TableRow key={`${category.id || "missing"}-${index}`}>
+                    ) : (
+                      categories.map((category, index) => (
+                        <TableRow key={`${category.id || "missing"}-${index}`}>
                         <TableCell>{category.name || "-"}</TableCell>
-                        <TableCell className="font-mono text-xs">{category.id || "-"}</TableCell>
+                        <TableCell className="font-mono text-xs break-all">{category.id || "-"}</TableCell>
                       </TableRow>
                     ))
                   )}

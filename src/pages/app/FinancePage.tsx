@@ -14,11 +14,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Euro, TrendingUp, AlertCircle, FileText, Star, Users, CheckCircle, Clock, Trash2 } from "lucide-react";
+import { Euro, TrendingUp, AlertCircle, FileText, Star, Users, CheckCircle, Clock, Trash2, Eye, FileDown, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { de } from "date-fns/locale";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 
 const invoiceStatusLabels: Record<InvoiceStatus, string> = {
   DRAFT: "Entwurf",
@@ -76,6 +77,52 @@ export const FinancePage = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const { currentUser } = useAuth();
 
+  const formatMoney = (value: number) =>
+    Number(value).toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  const fetchInvoicePdfBlob = async (invoice: Invoice): Promise<Blob> => {
+    if (!invoice.sevdesk_invoice_id) {
+      throw new Error("Keine Sevdesk-Rechnung verfügbar");
+    }
+    const token = localStorage.getItem(TOKEN_KEY);
+    const response = await fetch(`${API_CONFIG.BASE_URL}/invoices/${invoice.id}/pdf`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!response.ok) {
+      throw new Error(`PDF konnte nicht geladen werden (HTTP ${response.status})`);
+    }
+    return response.blob();
+  };
+
+  const openInvoicePdf = async (invoice: Invoice) => {
+    try {
+      const blob = await fetchInvoicePdfBlob(invoice);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 30_000);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error(message);
+    }
+  };
+
+  const downloadInvoicePdf = async (invoice: Invoice) => {
+    try {
+      const blob = await fetchInvoicePdfBlob(invoice);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Rechnung-${invoice.invoice_number || invoice.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error(message);
+    }
+  };
+
   useEffect(() => {
     loadData();
   }, []);
@@ -99,11 +146,11 @@ export const FinancePage = () => {
 
   const totalRevenue = invoices
     .filter(inv => inv.status === "PAID")
-    .reduce((sum, inv) => sum + inv.amount, 0);
+    .reduce((sum, inv) => sum + Number(inv.amount), 0);
 
   const openAmount = invoices
     .filter(inv => inv.status === "SENT" || inv.status === "OVERDUE")
-    .reduce((sum, inv) => sum + inv.amount, 0);
+    .reduce((sum, inv) => sum + Number(inv.amount), 0);
 
   const openCount = invoices.filter(inv => inv.status === "SENT" || inv.status === "OVERDUE").length;
   const overdueCount = invoices.filter(inv => inv.status === "OVERDUE").length;
@@ -140,13 +187,13 @@ export const FinancePage = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Gesamtumsatz"
-              value={`${totalRevenue.toLocaleString("de-DE")} €`}
+              value={`${formatMoney(totalRevenue)} €`}
               icon={Euro}
               description="Bezahlte Rechnungen"
             />
             <StatCard
               title="Offene Summe"
-              value={`${openAmount.toLocaleString("de-DE")} €`}
+              value={`${formatMoney(openAmount)} €`}
               icon={TrendingUp}
               description="Ausstehend"
             />
@@ -438,7 +485,7 @@ export const FinancePage = () => {
                             {invoice.project_id || invoice.projectId || "-"}
                           </TableCell>
                           <TableCell className="text-right font-medium">
-                            {invoice.amount.toLocaleString("de-DE")} €
+                            {formatMoney(Number(invoice.amount))} €
                           </TableCell>
                           <TableCell>
                             <Badge variant={invoiceStatusColors[invoice.status] as any}>
@@ -457,6 +504,40 @@ export const FinancePage = () => {
                           </TableCell>
                           {canManageInvoices && (
                             <TableCell className="text-right">
+                              <div className="flex flex-wrap justify-end gap-2">
+                                {invoice.sevdesk_invoice_id && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      onClick={() => openInvoicePdf(invoice)}
+                                      title="PDF ansehen"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="h-8"
+                                      onClick={() => downloadInvoicePdf(invoice)}
+                                      title="PDF herunterladen"
+                                    >
+                                      <FileDown className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
+                                {invoice.sevdesk_invoice_url && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-8"
+                                    onClick={() => window.open(invoice.sevdesk_invoice_url!, "_blank")}
+                                    title="In Sevdesk öffnen"
+                                  >
+                                    <ExternalLink className="h-4 w-4" />
+                                  </Button>
+                                )}
                               <Button
                                 size="sm"
                                 variant="destructive"
@@ -466,6 +547,7 @@ export const FinancePage = () => {
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
+                              </div>
                             </TableCell>
                           )}
                         </TableRow>

@@ -473,24 +473,40 @@ export const invoicesApi = {
     if (filters?.status) params.append("status", filters.status);
 
     const query = params.toString() ? `?${params.toString()}` : "";
-    return fetchApi<Invoice[]>(`/invoices${query}`);
+    const invoices = await fetchApi<Invoice[]>(`/invoices${query}`);
+    return (invoices || []).map((invoice) => ({
+      ...invoice,
+      amount: typeof (invoice as any).amount === "string" ? Number((invoice as any).amount) : invoice.amount,
+    }));
   },
 
   async getInvoice(id: string): Promise<Invoice> {
-    return fetchApi<Invoice>(`/invoices/${id}`);
+    const invoice = await fetchApi<Invoice>(`/invoices/${id}`);
+    return {
+      ...invoice,
+      amount: typeof (invoice as any).amount === "string" ? Number((invoice as any).amount) : invoice.amount,
+    };
   },
 
   async createInvoice(data: InvoiceCreateRequest): Promise<Invoice> {
-    return fetchApi<Invoice>("/invoices", {
+    const invoice = await fetchApi<Invoice>("/invoices", {
       method: "POST",
       body: JSON.stringify(data),
     });
+    return {
+      ...invoice,
+      amount: typeof (invoice as any).amount === "string" ? Number((invoice as any).amount) : invoice.amount,
+    };
   },
 
   async markPaid(id: string): Promise<Invoice> {
-    return fetchApi<Invoice>(`/invoices/${id}/mark-paid`, {
+    const invoice = await fetchApi<Invoice>(`/invoices/${id}/mark-paid`, {
       method: "POST",
     });
+    return {
+      ...invoice,
+      amount: typeof (invoice as any).amount === "string" ? Number((invoice as any).amount) : invoice.amount,
+    };
   },
 
   async getSummary(): Promise<InvoiceSummary> {

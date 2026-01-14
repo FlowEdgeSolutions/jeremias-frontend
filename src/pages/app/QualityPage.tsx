@@ -11,6 +11,7 @@ import { toast } from "sonner";
 export const QualityPage = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [qcActionLoadingId, setQcActionLoadingId] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const formatErrorMessage = (error: unknown) => {
@@ -42,21 +43,27 @@ export const QualityPage = () => {
         toast.error("Ungültige Projekt-ID");
         return;
       }
+      setQcActionLoadingId(projectId);
       await qcApi.approveProject(projectId);
       toast.success("Projekt freigegeben!");
       loadProjects();
     } catch (error: unknown) {
       toast.error(formatErrorMessage(error));
+    } finally {
+      setQcActionLoadingId(null);
     }
   };
 
   const handleReject = async (projectId: string) => {
     try {
+      setQcActionLoadingId(projectId);
       await qcApi.rejectProject(projectId);
       toast.info("Projekt zurück in Revision geschickt");
       loadProjects();
     } catch (error: unknown) {
       toast.error(formatErrorMessage(error));
+    } finally {
+      setQcActionLoadingId(null);
     }
   };
 
@@ -111,19 +118,19 @@ export const QualityPage = () => {
                 <Button
                   className="flex-1 bg-success hover:bg-success/90 text-success-foreground"
                   onClick={() => handleApprove(project.id)}
-                  disabled={loading}
+                  disabled={loading || qcActionLoadingId === project.id}
                 >
                   <CheckCircle2 className="h-4 w-4 mr-2" />
-                  Freigeben
+                  {qcActionLoadingId === project.id ? "Freigeben..." : "Freigeben"}
                 </Button>
                 <Button
                   className="flex-1"
                   variant="destructive"
                   onClick={() => handleReject(project.id)}
-                  disabled={loading}
+                  disabled={loading || qcActionLoadingId === project.id}
                 >
                   <XCircle className="h-4 w-4 mr-2" />
-                  Revision
+                  {qcActionLoadingId === project.id ? "Revision..." : "Revision"}
                 </Button>
               </div>
             </CardContent>
