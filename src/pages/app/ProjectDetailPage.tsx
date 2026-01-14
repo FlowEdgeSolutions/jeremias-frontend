@@ -1578,31 +1578,24 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien</Label>
                       <div className="border rounded-lg p-4">
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          type="button"
-                          disabled={filesUploading}
-                          onClick={() => {
-                            const input = inputFileInputRef.current;
-                            debugLog("input:buttonClick", { hasRef: !!input, disabled: filesUploading });
-                            if (!input) return;
-                            const anyInput = input as unknown as { showPicker?: () => void };
-                            if (typeof anyInput.showPicker === "function") anyInput.showPicker();
-                            else input.click();
-                          }}
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          Dateien hochladen (Input)
-                        </Button>
-
                         <input
+                          id="project-input-file-upload"
                           ref={inputFileInputRef}
                           type="file"
                           multiple
                           className="sr-only"
                           onChange={handleInputFileUpload}
                         />
+
+                        <Button asChild variant="outline" className="w-full" type="button">
+                          <label
+                            htmlFor="project-input-file-upload"
+                            onClick={() => debugLog("input:buttonClick", { disabled: filesUploading })}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Dateien hochladen (Input)
+                          </label>
+                        </Button>
                         
                         {filesLoading ? (
                           <p className="text-sm text-muted-foreground text-center mt-4">Dateien werden geladen...</p>
@@ -1682,30 +1675,24 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien (Output)</Label>
                       <div className="border rounded-lg p-4">
-                        <Button
-                          variant="outline"
-                          className="w-full"
-                          type="button"
-                          disabled={filesUploading}
-                          onClick={() => {
-                            const input = outputFileInputRef.current;
-                            debugLog("output:buttonClick", { hasRef: !!input, disabled: filesUploading });
-                            if (!input) return;
-                            const anyInput = input as unknown as { showPicker?: () => void };
-                            if (typeof anyInput.showPicker === "function") anyInput.showPicker();
-                            else input.click();
-                          }}
-                        >
-                          <Upload className="h-4 w-4 mr-2" />
-                          Dateien hochladen (Output)
-                        </Button>
                         <input
+                          id="project-output-file-upload"
                           ref={outputFileInputRef}
                           type="file"
                           multiple
                           className="sr-only"
                           onChange={handleOutputFileUpload}
                         />
+
+                        <Button asChild variant="outline" className="w-full" type="button">
+                          <label
+                            htmlFor="project-output-file-upload"
+                            onClick={() => debugLog("output:buttonClick", { disabled: filesUploading })}
+                          >
+                            <Upload className="h-4 w-4 mr-2" />
+                            Dateien hochladen (Output)
+                          </label>
+                        </Button>
                         
                         {filesLoading ? (
                           <p className="text-sm text-muted-foreground text-center mt-4">Dateien werden geladen...</p>
