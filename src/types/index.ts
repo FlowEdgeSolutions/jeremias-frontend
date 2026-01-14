@@ -19,7 +19,7 @@ export type QcStatus = "PENDING" | "APPROVED" | "REJECTED";
 
 export type InvoiceStatus = "DRAFT" | "SENT" | "PAID" | "OVERDUE";
 
-export type UserRole = "admin" | "sales" | "project_member" | "customer";
+export type UserRole = "admin" | "project_manager";
 
 export interface User {
   id: string;

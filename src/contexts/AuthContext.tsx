@@ -6,7 +6,7 @@ import { toast } from "sonner";
 interface AuthContextType {
   currentUser: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   logout: () => void;
   refreshUser: () => Promise<void>;
 }
@@ -39,6 +39,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const response = await apiClient.auth.login({ email, password });
       setCurrentUser(response.user);
       toast.success(`Willkommen, ${response.user.name}!`);
+      return response.user;
     } catch (error: any) {
       toast.error(error.message || "Login fehlgeschlagen");
       throw error;

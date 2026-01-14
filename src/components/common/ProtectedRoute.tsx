@@ -36,11 +36,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   // Check if user has required role
   if (allowedRoles && currentUser && !allowedRoles.includes(currentUser.role)) {
     // Redirect based on user role
-    if (currentUser.role === "customer") {
-      return <Navigate to="/portal/dashboard" replace />;
-    } else {
-      return <Navigate to="/app/leads" replace />;
+    if (currentUser.role === "project_manager") {
+      return <Navigate to="/app/projects" replace />;
     }
+    return <Navigate to="/app/leads" replace />;
   }
 
   return <>{children}</>;
@@ -51,15 +50,11 @@ export const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }
   <ProtectedRoute allowedRoles={["admin"]}>{children}</ProtectedRoute>
 );
 
-export const AdminOrSalesRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <ProtectedRoute allowedRoles={["admin", "sales"]}>{children}</ProtectedRoute>
+export const AdminOrProjectManagerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <ProtectedRoute allowedRoles={["admin", "project_manager"]}>{children}</ProtectedRoute>
 );
 
 export const InternalRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <ProtectedRoute allowedRoles={["admin", "sales", "project_member"]}>{children}</ProtectedRoute>
-);
-
-export const CustomerRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => (
-  <ProtectedRoute allowedRoles={["customer"]}>{children}</ProtectedRoute>
+  <ProtectedRoute allowedRoles={["admin", "project_manager"]}>{children}</ProtectedRoute>
 );
 

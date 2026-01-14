@@ -5,8 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/layouts/AppLayout";
-import { PortalLayout } from "@/components/layouts/PortalLayout";
-import { InternalRoute, CustomerRoute } from "@/components/common";
+import { useAuth } from "@/contexts/AuthContext";
+import { AdminOrProjectManagerRoute, AdminRoute, InternalRoute } from "@/components/common";
 
 // App Pages
 import { LeadsPage } from "@/pages/app/LeadsPage";
@@ -24,18 +24,17 @@ import { ProfilePage } from "@/pages/app/ProfilePage";
 import { UserManagementPage } from "@/pages/app/UserManagementPage";
 import { SettingsPage } from "@/pages/app/SettingsPage";
 
-// Portal Pages
 import { PortalLoginPage } from "@/pages/portal/PortalLoginPage";
-import { PortalDashboardPage } from "@/pages/portal/PortalDashboardPage";
-import { PortalProjectsPage } from "@/pages/portal/PortalProjectsPage";
-import { PortalProjectDetailPage } from "@/pages/portal/PortalProjectDetailPage";
-import { PortalOrderPage } from "@/pages/portal/PortalOrderPage";
-import { PortalInvoicesPage } from "@/pages/portal/PortalInvoicesPage";
-import { PortalAccountPage } from "@/pages/portal/PortalAccountPage";
 
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+const AppIndexRedirect = () => {
+  const { currentUser } = useAuth();
+  if (!currentUser) return <Navigate to="/portal/login" replace />;
+  return <Navigate to={currentUser.role === "admin" ? "/app/leads" : "/app/projects"} replace />;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -46,46 +45,33 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             {/* Redirect root to app */}
-            <Route path="/" element={<Navigate to="/app/leads" replace />} />
+            <Route path="/" element={<Navigate to="/app" replace />} />
 
-            {/* Internal App Routes - Protected for admin, sales, project_member */}
+            {/* Internal App Routes - Protected for admin + project_manager */}
             <Route path="/app" element={
               <InternalRoute>
                 <AppLayout />
               </InternalRoute>
             }>
-              <Route index element={<Navigate to="/app/leads" replace />} />
-              <Route path="leads" element={<LeadsPage />} />
-              <Route path="customers" element={<CustomersPage />} />
-              <Route path="customers/:id" element={<CustomerDetailPage />} />
-              <Route path="projects" element={<ProjectsPage />} />
-              <Route path="projects/new" element={<CreateProjectPage />} />
-              <Route path="projects/:id" element={<ProjectDetailPage />} />
-              <Route path="finance" element={<FinancePage />} />
-              <Route path="quality" element={<QualityPage />} />
-              <Route path="archive" element={<ArchivePage />} />
-              <Route path="emails" element={<EmailsPage />} />
-              <Route path="emails/callback" element={<EmailCallbackPage />} />
-              <Route path="users" element={<UserManagementPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route path="settings" element={<SettingsPage />} />
+              <Route index element={<AppIndexRedirect />} />
+              <Route path="leads" element={<AdminRoute><LeadsPage /></AdminRoute>} />
+              <Route path="customers" element={<AdminRoute><CustomersPage /></AdminRoute>} />
+              <Route path="customers/:id" element={<AdminRoute><CustomerDetailPage /></AdminRoute>} />
+              <Route path="projects" element={<AdminOrProjectManagerRoute><ProjectsPage /></AdminOrProjectManagerRoute>} />
+              <Route path="projects/new" element={<AdminRoute><CreateProjectPage /></AdminRoute>} />
+              <Route path="projects/:id" element={<AdminOrProjectManagerRoute><ProjectDetailPage /></AdminOrProjectManagerRoute>} />
+              <Route path="finance" element={<AdminRoute><FinancePage /></AdminRoute>} />
+              <Route path="quality" element={<AdminRoute><QualityPage /></AdminRoute>} />
+              <Route path="archive" element={<AdminOrProjectManagerRoute><ArchivePage /></AdminOrProjectManagerRoute>} />
+              <Route path="emails" element={<AdminRoute><EmailsPage /></AdminRoute>} />
+              <Route path="emails/callback" element={<AdminRoute><EmailCallbackPage /></AdminRoute>} />
+              <Route path="users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
+              <Route path="profile" element={<AdminOrProjectManagerRoute><ProfilePage /></AdminOrProjectManagerRoute>} />
+              <Route path="settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
             </Route>
 
-            {/* Portal Routes - Protected for customers */}
+            {/* Login */}
             <Route path="/portal/login" element={<PortalLoginPage />} />
-            <Route path="/portal" element={
-              <CustomerRoute>
-                <PortalLayout />
-              </CustomerRoute>
-            }>
-              <Route index element={<Navigate to="/portal/dashboard" replace />} />
-              <Route path="dashboard" element={<PortalDashboardPage />} />
-              <Route path="projects" element={<PortalProjectsPage />} />
-              <Route path="projects/:id" element={<PortalProjectDetailPage />} />
-              <Route path="orders/new" element={<PortalOrderPage />} />
-              <Route path="invoices" element={<PortalInvoicesPage />} />
-              <Route path="account" element={<PortalAccountPage />} />
-            </Route>
 
             {/* 404 */}
             <Route path="*" element={<NotFound />} />

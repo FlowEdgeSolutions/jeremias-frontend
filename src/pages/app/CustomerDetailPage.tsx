@@ -165,7 +165,7 @@ export const CustomerDetailPage = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showComposeBox, setShowComposeBox] = useState(false);
   const [emailAccounts, setEmailAccounts] = useState<Array<{ id: string; email: string; provider: string; is_primary: boolean }>>([]);
-  const canManageInvoices = currentUser?.role && ["admin", "sales"].includes(currentUser.role);
+  const canManageInvoices = currentUser?.role === "admin";
   
   useEffect(() => {
     console.log("CustomerDetailPage mounted, ID:", id);

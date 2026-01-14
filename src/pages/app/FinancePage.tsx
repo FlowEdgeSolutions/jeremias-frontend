@@ -39,9 +39,7 @@ const getRoleBadgeColor = (role: string) => {
   switch (role) {
     case "admin":
       return "bg-red-500/10 text-red-500 border-red-500/20";
-    case "sales":
-      return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-    case "project_member":
+    case "project_manager":
       return "bg-green-500/10 text-green-500 border-green-500/20";
     default:
       return "bg-muted text-muted-foreground";
@@ -52,10 +50,8 @@ const getRoleLabel = (role: string) => {
   switch (role) {
     case "admin":
       return "Admin";
-    case "sales":
-      return "Vertrieb";
-    case "project_member":
-      return "Mitarbeiter";
+    case "project_manager":
+      return "Projektmanager";
     default:
       return role;
   }
@@ -156,7 +152,7 @@ export const FinancePage = () => {
   const draftCount = invoices.filter(inv => inv.status === "DRAFT").length;
   const totalCredits = employeeCredits.reduce((sum, emp) => sum + emp.total_credits, 0);
 
-  const canManageInvoices = currentUser?.role && ["admin", "sales"].includes(currentUser.role);
+  const canManageInvoices = currentUser?.role === "admin";
 
   const handleDeleteInvoice = async (invoiceId: string) => {
     const confirmed = window.confirm("Rechnung wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.");

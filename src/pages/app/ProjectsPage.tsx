@@ -74,7 +74,7 @@ export const ProjectsPage = () => {
       const err = error as any;
       const message = err instanceof Error ? err.message : "Unbekannter Fehler";
       if (err?.status === 403) {
-        toast.error("Zugriff verweigert. Du brauchst die Rolle 'admin' oder 'sales' zum Löschen.");
+        toast.error("Zugriff verweigert. Du brauchst die Rolle 'admin' zum Löschen.");
       } else {
         toast.error("Fehler beim Löschen: " + message);
       }
@@ -82,10 +82,6 @@ export const ProjectsPage = () => {
   };
 
   const filteredProjects = projects.filter((project) => {
-    // Project members see only their projects
-    if (currentUser?.role === "project_member") {
-      return project.assigned_user_ids?.includes(currentUser.id) || false;
-    }
     // Filter by selected user
     if (selectedUserId !== "ALL") {
       return project.assigned_user_ids?.includes(selectedUserId) || false;
@@ -150,7 +146,7 @@ export const ProjectsPage = () => {
                   {project.project_number && (
                     <span className="text-xs text-muted-foreground">{project.project_number}</span>
                   )}
-                  {currentUser?.role && ["admin", "sales"].includes(currentUser.role) && (
+                  {currentUser?.role === "admin" && (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -221,10 +217,12 @@ export const ProjectsPage = () => {
           </div>
         )}
         
-        <Button onClick={() => navigate("/app/projects/new")} className="w-full sm:w-auto sm:ml-auto">
-          <Plus className="h-4 w-4 mr-2" />
-          Neues Projekt
-        </Button>
+        {currentUser?.role === "admin" && (
+          <Button onClick={() => navigate("/app/projects/new")} className="w-full sm:w-auto sm:ml-auto">
+            <Plus className="h-4 w-4 mr-2" />
+            Neues Projekt
+          </Button>
+        )}
       </div>
 
       <div className="space-y-4 md:space-y-0 md:flex md:gap-4 md:overflow-x-auto md:pb-4">

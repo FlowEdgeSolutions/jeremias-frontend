@@ -5,9 +5,8 @@ export { NavLink } from "./NavLink";
 export { 
   ProtectedRoute, 
   AdminRoute, 
-  AdminOrSalesRoute, 
-  InternalRoute, 
-  CustomerRoute 
+  AdminOrProjectManagerRoute, 
+  InternalRoute
 } from "./ProtectedRoute";
 export { StatCard } from "./StatCard";
 

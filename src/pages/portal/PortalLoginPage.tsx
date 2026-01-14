@@ -18,11 +18,7 @@ export const PortalLoginPage = () => {
   // Redirect if already logged in
   if (currentUser) {
     const from = (location.state as any)?.from?.pathname;
-    if (currentUser.role === "customer") {
-      navigate(from || "/portal/dashboard", { replace: true });
-    } else {
-      navigate("/app/leads", { replace: true });
-    }
+    navigate(from || (currentUser.role === "admin" ? "/app/leads" : "/app/projects"), { replace: true });
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,12 +26,9 @@ export const PortalLoginPage = () => {
     setIsLoading(true);
 
     try {
-      await login(email, password);
-      // Navigation will happen automatically via the useEffect when currentUser is set
-      // Give it a moment to update state
-      setTimeout(() => {
-        window.location.href = "/app/emails";
-      }, 500);
+      const user = await login(email, password);
+      const from = (location.state as any)?.from?.pathname;
+      navigate(from || (user.role === "admin" ? "/app/leads" : "/app/projects"), { replace: true });
     } catch (error) {
       // Error toast already shown by AuthContext
       setIsLoading(false);

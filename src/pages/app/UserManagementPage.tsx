@@ -34,8 +34,7 @@ import { toast } from "sonner";
 
 const ROLE_OPTIONS: { value: UserRole; label: string; description: string }[] = [
   { value: "admin", label: "Administrator", description: "Vollzugriff auf alle Funktionen" },
-  { value: "sales", label: "Vertrieb", description: "Zugriff auf Leads, Kunden, Projekte" },
-  { value: "project_member", label: "Projektmitarbeiter", description: "Zugriff auf zugewiesene Projekte" },
+  { value: "project_manager", label: "Projektmanager", description: "Zugriff auf Projekte und Archiv" },
 ];
 
 export const UserManagementPage = () => {
@@ -49,7 +48,7 @@ export const UserManagementPage = () => {
     name: "",
     email: "",
     password: "",
-    role: "project_member" as UserRole,
+    role: "project_manager" as UserRole,
   });
 
   useEffect(() => {
@@ -93,7 +92,7 @@ export const UserManagementPage = () => {
 
       toast.success("Benutzer erfolgreich erstellt!");
       setIsDialogOpen(false);
-      setFormData({ name: "", email: "", password: "", role: "project_member" });
+      setFormData({ name: "", email: "", password: "", role: "project_manager" });
       loadUsers();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
@@ -107,9 +106,7 @@ export const UserManagementPage = () => {
     switch (role) {
       case "admin":
         return "bg-red-500/10 text-red-500 border-red-500/20";
-      case "sales":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "project_member":
+      case "project_manager":
         return "bg-green-500/10 text-green-500 border-green-500/20";
       default:
         return "bg-muted text-muted-foreground";
@@ -120,12 +117,8 @@ export const UserManagementPage = () => {
     switch (role) {
       case "admin":
         return "Administrator";
-      case "sales":
-        return "Vertrieb";
-      case "project_member":
-        return "Projektmitarbeiter";
-      case "customer":
-        return "Kunde";
+      case "project_manager":
+        return "Projektmanager";
       default:
         return role;
     }
@@ -264,12 +257,12 @@ export const UserManagementPage = () => {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Projektmitarbeiter</CardTitle>
+            <CardTitle className="text-sm font-medium">Projektmanager</CardTitle>
             <UserPlus className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {users.filter((u) => u.role === "project_member").length}
+              {users.filter((u) => u.role === "project_manager").length}
             </div>
           </CardContent>
         </Card>

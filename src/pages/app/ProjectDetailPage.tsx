@@ -79,6 +79,7 @@ export const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+  const isAdmin = currentUser?.role === "admin";
 
   const debugEnabled = useMemo(() => {
     try {
@@ -232,14 +233,14 @@ export const ProjectDetailPage = () => {
   useEffect(() => {
     if (!id) return;
     loadProject();
-    loadEmailAccounts();
+    if (isAdmin) loadEmailAccounts();
     
     // Load signatures from localStorage
     const savedSignatures = localStorage.getItem("email_signatures");
     if (savedSignatures) {
       setSignatures(JSON.parse(savedSignatures));
     }
-  }, [id]);
+  }, [id, isAdmin]);
 
   useEffect(() => {
     return () => {
@@ -284,11 +285,12 @@ export const ProjectDetailPage = () => {
   
   // Load customer emails when customer is loaded (including additional project email)
   useEffect(() => {
+    if (!isAdmin) return;
     const emailsToLoad = [customer?.email, additionalEmail].filter(Boolean) as string[];
     if (emailsToLoad.length > 0) {
       loadCustomerEmails(emailsToLoad);
     }
-  }, [customer, additionalEmail]);
+  }, [customer, additionalEmail, isAdmin]);
 
   // Auto-save effect
   useEffect(() => {
@@ -368,16 +370,21 @@ export const ProjectDetailPage = () => {
         setFilesLoading(false);
       }
 
-      // Load invoice for this project (if available)
-      try {
-        setInvoiceLoading(true);
-        const invoices = await invoicesApi.getInvoices({ customer_id: projectData.customer_id });
-        const inv = invoices.find((i) => (i.project_id || i.projectId) === projectData.id) || null;
-        setProjectInvoice(inv);
-      } catch (err) {
-        console.error("Failed to load project invoice:", err);
+      // Load invoice for this project (if available) - admin only
+      if (isAdmin) {
+        try {
+          setInvoiceLoading(true);
+          const invoices = await invoicesApi.getInvoices({ customer_id: projectData.customer_id });
+          const inv = invoices.find((i) => (i.project_id || i.projectId) === projectData.id) || null;
+          setProjectInvoice(inv);
+        } catch (err) {
+          console.error("Failed to load project invoice:", err);
+          setProjectInvoice(null);
+        } finally {
+          setInvoiceLoading(false);
+        }
+      } else {
         setProjectInvoice(null);
-      } finally {
         setInvoiceLoading(false);
       }
     } catch (error: unknown) {
@@ -652,7 +659,7 @@ export const ProjectDetailPage = () => {
       
       // Reload emails to show the sent one
       const emailsToLoad = [customer?.email, additionalEmail].filter(Boolean) as string[];
-      if (emailsToLoad.length > 0) {
+      if (isAdmin && emailsToLoad.length > 0) {
         loadCustomerEmails(emailsToLoad);
       }
     } catch (error) {
@@ -1051,7 +1058,7 @@ export const ProjectDetailPage = () => {
       const err = error as any;
       const message = err instanceof Error ? err.message : "Unbekannter Fehler";
       if (err?.status === 403) {
-        toast.error("Zugriff verweigert. Du brauchst die Rolle 'admin' oder 'sales' zum Löschen.");
+        toast.error("Zugriff verweigert. Du brauchst die Rolle 'admin' zum Löschen.");
       } else {
         toast.error("Fehler beim Löschen: " + message);
       }
@@ -1355,7 +1362,7 @@ export const ProjectDetailPage = () => {
             </Button>
             
             {/* QC Buttons - nur wenn Status FERTIGGESTELLT und qc_status PENDING */}
-            {project.status === "FERTIGGESTELLT" && (project.qc_status === "PENDING" || project.qcStatus === "PENDING") && (
+            {isAdmin && project.status === "FERTIGGESTELLT" && (project.qc_status === "PENDING" || project.qcStatus === "PENDING") && (
               <>
                 <Button
                   className="bg-success hover:bg-success/90 text-success-foreground"
@@ -1378,8 +1385,8 @@ export const ProjectDetailPage = () => {
               </>
             )}
 
-            {/* Admin/Sales: Projekt löschen */}
-            {currentUser?.role && ["admin", "sales"].includes(currentUser.role) && (
+            {/* Admin: Projekt löschen */}
+            {currentUser?.role === "admin" && (
               <div className="ml-2">
                 <Button variant="ghost" size="sm" onClick={handleDeleteProject} title="Projekt löschen">
                   <Trash2 className="h-4 w-4" />
@@ -1449,8 +1456,9 @@ export const ProjectDetailPage = () => {
                 </p>
               </div>
 
-              <div>
-                <Label>Rechnung (Sevdesk)</Label>
+              {isAdmin && (
+                <div>
+                  <Label>Rechnung (Sevdesk)</Label>
                 {invoiceLoading ? (
                   <p className="text-sm text-muted-foreground mt-1">Lade Rechnung...</p>
                 ) : !projectInvoice ? (
@@ -1479,7 +1487,8 @@ export const ProjectDetailPage = () => {
                 ) : (
                   <p className="text-sm text-muted-foreground mt-1">Keine Sevdesk-Rechnung verfügbar</p>
                 )}
-              </div>
+                </div>
+              )}
               
               <div>
                 <Label>Kundennummer</Label>
@@ -1614,9 +1623,9 @@ export const ProjectDetailPage = () => {
         {/* Right Side: Tabs */}
         <div className="col-span-5">
           <Tabs defaultValue="content" className="w-full">
-            <TabsList className="w-full grid grid-cols-3 gap-1">
+            <TabsList className={`w-full grid ${isAdmin ? "grid-cols-3" : "grid-cols-2"} gap-1`}>
               <TabsTrigger value="content">Inhalt & Dateien</TabsTrigger>
-              <TabsTrigger value="customer">E-Mail-Kommunikation</TabsTrigger>
+              {isAdmin && <TabsTrigger value="customer">E-Mail-Kommunikation</TabsTrigger>}
               <TabsTrigger value="internal">Interne Notizen</TabsTrigger>
             </TabsList>
 
@@ -1904,7 +1913,8 @@ export const ProjectDetailPage = () => {
               </div>
             </TabsContent>
 
-            <TabsContent value="customer" className="mt-4">
+            {isAdmin && (
+              <TabsContent value="customer" className="mt-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                   <div>
@@ -2393,7 +2403,8 @@ export const ProjectDetailPage = () => {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
+              </TabsContent>
+            )}
 
             <TabsContent value="internal" className="mt-4">
               <Card>

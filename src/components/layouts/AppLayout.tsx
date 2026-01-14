@@ -52,7 +52,7 @@ export const AppLayout = () => {
   }, [isMobileMenuOpen]);
 
   const isAdmin = currentUser?.role === "admin";
-  const isProjectMember = currentUser?.role === "project_member";
+  const isProjectManager = currentUser?.role === "project_manager";
 
   // Menu categories with items
   type NavItem = { path: string; label: string; icon: LucideIcon };
@@ -72,7 +72,7 @@ export const AppLayout = () => {
       category: "Projekte",
       items: [
         { path: "/app/projects", label: "Projekte", icon: FolderKanban },
-        { path: "/app/quality", label: "Qualität", icon: CheckCircle2 },
+        ...(isAdmin ? [{ path: "/app/quality", label: "Qualität", icon: CheckCircle2 }] : []),
         { path: "/app/archive", label: "Archiv", icon: Archive },
       ]
     },
@@ -116,7 +116,7 @@ export const AppLayout = () => {
             className="h-8 w-auto dark:invert"
           />
           <p className="text-sm text-sidebar-foreground/70 mt-1 whitespace-nowrap">
-            {isAdmin ? "Admin" : isProjectMember ? "Team" : ""}
+            {isAdmin ? "Admin" : isProjectManager ? "Projektmanager" : ""}
           </p>
         </div>
         {isMobile ? (

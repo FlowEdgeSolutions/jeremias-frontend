@@ -59,12 +59,8 @@ export const ProfilePage = () => {
     switch (role) {
       case "admin":
         return "bg-primary text-primary-foreground";
-      case "sales":
-        return "bg-accent text-accent-foreground";
-      case "project_member":
+      case "project_manager":
         return "bg-info text-info-foreground";
-      case "customer":
-        return "bg-success text-success-foreground";
       default:
         return "bg-muted text-muted-foreground";
     }
@@ -74,12 +70,8 @@ export const ProfilePage = () => {
     switch (role) {
       case "admin":
         return "Administrator";
-      case "sales":
-        return "Vertrieb";
-      case "project_member":
-        return "Projektmitarbeiter";
-      case "customer":
-        return "Kunde";
+      case "project_manager":
+        return "Projektmanager";
       default:
         return role;
     }
