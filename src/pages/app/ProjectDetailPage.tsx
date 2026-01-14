@@ -1116,15 +1116,6 @@ export const ProjectDetailPage = () => {
     await uploadFiles(files, "input");
   };
 
-  const handleInputDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingInputFiles(false);
-    const files = e.dataTransfer.files;
-    debugLog("input:onDrop", { fileCount: files?.length || 0 });
-    await uploadFiles(files, "input");
-  };
-
   const openProjectFile = async (file: ProjectFileInfo) => {
     if (!id) return;
     try {
@@ -1189,15 +1180,6 @@ export const ProjectDetailPage = () => {
     const files = e.target.files;
     e.target.value = "";
     debugLog("output:onChange", { fileCount: files?.length || 0 });
-    await uploadFiles(files, "output");
-  };
-
-  const handleOutputDrop = async (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingOutputFiles(false);
-    const files = e.dataTransfer.files;
-    debugLog("output:onDrop", { fileCount: files?.length || 0 });
     await uploadFiles(files, "output");
   };
 
@@ -1599,45 +1581,49 @@ export const ProjectDetailPage = () => {
                       <Label>Dateien</Label>
                       <div className="border rounded-lg p-4">
                         <div
-                          className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+                          className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
                             isDraggingInputFiles
                               ? "border-primary bg-primary/5"
                               : "border-muted-foreground/25 hover:border-primary/50"
                           }`}
-                          onDragEnter={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setIsDraggingInputFiles(true);
-                            debugLog("input:dragEnter");
-                          }}
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (!isDraggingInputFiles) setIsDraggingInputFiles(true);
-                          }}
-                          onDragLeave={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setIsDraggingInputFiles(false);
-                            debugLog("input:dragLeave");
-                          }}
-                          onDrop={handleInputDrop}
                         >
-                          <div className="flex flex-col items-center justify-center gap-2 text-center">
+                          <div className="flex flex-col items-center justify-center gap-2 text-center pointer-events-none">
                             <Upload className={`h-8 w-8 transition-colors ${isDraggingInputFiles ? "text-primary" : "text-muted-foreground"}`} />
-                            <Label htmlFor="project-input-file-upload" className="cursor-pointer text-primary hover:underline">
-                              Dateien auswählen
-                            </Label>
-                            <p className="text-xs text-muted-foreground">oder Dateien hierher ziehen</p>
+                            <p className="text-sm font-medium">
+                              <span className="text-primary underline underline-offset-2">Dateien auswählen</span> oder hierher ziehen
+                            </p>
+                            <p className="text-xs text-muted-foreground">PDFs, Grundrisse, Schnitte, etc.</p>
                           </div>
-                          <Input
+                          <input
                             id="project-input-file-upload"
                             ref={inputFileInputRef}
                             type="file"
                             multiple
-                            onChange={handleInputFileUpload}
-                            className="hidden"
                             disabled={filesUploading}
+                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-[0.01]"
+                            onClick={() => debugLog("input:picker:click")}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (!isDraggingInputFiles) setIsDraggingInputFiles(true);
+                            }}
+                            onDragEnter={() => {
+                              setIsDraggingInputFiles(true);
+                              debugLog("input:dragEnter");
+                            }}
+                            onDragLeave={() => {
+                              setIsDraggingInputFiles(false);
+                              debugLog("input:dragLeave");
+                            }}
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setIsDraggingInputFiles(false);
+                              const files = e.dataTransfer.files;
+                              debugLog("input:onDrop", { fileCount: files?.length || 0 });
+                              await uploadFiles(files, "input");
+                            }}
+                            onChange={handleInputFileUpload}
                           />
                         </div>
                         
@@ -1720,45 +1706,49 @@ export const ProjectDetailPage = () => {
                       <Label>Dateien (Output)</Label>
                       <div className="border rounded-lg p-4">
                         <div
-                          className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+                          className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
                             isDraggingOutputFiles
                               ? "border-primary bg-primary/5"
                               : "border-muted-foreground/25 hover:border-primary/50"
                           }`}
-                          onDragEnter={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setIsDraggingOutputFiles(true);
-                            debugLog("output:dragEnter");
-                          }}
-                          onDragOver={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            if (!isDraggingOutputFiles) setIsDraggingOutputFiles(true);
-                          }}
-                          onDragLeave={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            setIsDraggingOutputFiles(false);
-                            debugLog("output:dragLeave");
-                          }}
-                          onDrop={handleOutputDrop}
                         >
-                          <div className="flex flex-col items-center justify-center gap-2 text-center">
+                          <div className="flex flex-col items-center justify-center gap-2 text-center pointer-events-none">
                             <Upload className={`h-8 w-8 transition-colors ${isDraggingOutputFiles ? "text-primary" : "text-muted-foreground"}`} />
-                            <Label htmlFor="project-output-file-upload" className="cursor-pointer text-primary hover:underline">
-                              Dateien auswählen
-                            </Label>
-                            <p className="text-xs text-muted-foreground">oder Dateien hierher ziehen</p>
+                            <p className="text-sm font-medium">
+                              <span className="text-primary underline underline-offset-2">Dateien auswählen</span> oder hierher ziehen
+                            </p>
+                            <p className="text-xs text-muted-foreground">Ergebnisse, Berichte, PDFs, etc.</p>
                           </div>
-                          <Input
+                          <input
                             id="project-output-file-upload"
                             ref={outputFileInputRef}
                             type="file"
                             multiple
-                            onChange={handleOutputFileUpload}
-                            className="hidden"
                             disabled={filesUploading}
+                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-[0.01]"
+                            onClick={() => debugLog("output:picker:click")}
+                            onDragOver={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              if (!isDraggingOutputFiles) setIsDraggingOutputFiles(true);
+                            }}
+                            onDragEnter={() => {
+                              setIsDraggingOutputFiles(true);
+                              debugLog("output:dragEnter");
+                            }}
+                            onDragLeave={() => {
+                              setIsDraggingOutputFiles(false);
+                              debugLog("output:dragLeave");
+                            }}
+                            onDrop={async (e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setIsDraggingOutputFiles(false);
+                              const files = e.dataTransfer.files;
+                              debugLog("output:onDrop", { fileCount: files?.length || 0 });
+                              await uploadFiles(files, "output");
+                            }}
+                            onChange={handleOutputFileUpload}
                           />
                         </div>
                         
