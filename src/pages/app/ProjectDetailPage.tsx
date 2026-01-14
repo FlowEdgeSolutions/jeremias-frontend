@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Save, Upload, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox, Eye, ExternalLink } from "lucide-react";
+import { ArrowLeft, Save, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox, Eye, ExternalLink } from "lucide-react";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 
@@ -186,8 +186,6 @@ export const ProjectDetailPage = () => {
   const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesUploading, setFilesUploading] = useState(false);
-  const [isDraggingInputFiles, setIsDraggingInputFiles] = useState(false);
-  const [isDraggingOutputFiles, setIsDraggingOutputFiles] = useState(false);
   
   // Determine if credits can be manually edited based on product
   const [allowCustomCredits, setAllowCustomCredits] = useState(false);
@@ -218,8 +216,6 @@ export const ProjectDetailPage = () => {
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const inputFileInputRef = useRef<HTMLInputElement>(null);
-  const outputFileInputRef = useRef<HTMLInputElement>(null);
 
   const formatErrorMessage = (error: unknown) => {
     const err = error as { status?: number; message?: string };
@@ -1580,51 +1576,19 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien</Label>
                       <div className="border rounded-lg p-4">
-                        <div
-                          className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
-                            isDraggingInputFiles
-                              ? "border-primary bg-primary/5"
-                              : "border-muted-foreground/25 hover:border-primary/50"
-                          }`}
-                        >
-                          <div className="flex flex-col items-center justify-center gap-2 text-center pointer-events-none">
-                            <Upload className={`h-8 w-8 transition-colors ${isDraggingInputFiles ? "text-primary" : "text-muted-foreground"}`} />
-                            <p className="text-sm font-medium">
-                              <span className="text-primary underline underline-offset-2">Dateien auswählen</span> oder hierher ziehen
-                            </p>
-                            <p className="text-xs text-muted-foreground">PDFs, Grundrisse, Schnitte, etc.</p>
-                          </div>
-                          <input
+                        <div className="space-y-2">
+                          <Input
                             id="project-input-file-upload"
-                            ref={inputFileInputRef}
                             type="file"
                             multiple
+                            accept=".pdf,application/pdf,image/*"
                             disabled={filesUploading}
-                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-[0.01]"
                             onClick={() => debugLog("input:picker:click")}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (!isDraggingInputFiles) setIsDraggingInputFiles(true);
-                            }}
-                            onDragEnter={() => {
-                              setIsDraggingInputFiles(true);
-                              debugLog("input:dragEnter");
-                            }}
-                            onDragLeave={() => {
-                              setIsDraggingInputFiles(false);
-                              debugLog("input:dragLeave");
-                            }}
-                            onDrop={async (e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setIsDraggingInputFiles(false);
-                              const files = e.dataTransfer.files;
-                              debugLog("input:onDrop", { fileCount: files?.length || 0 });
-                              await uploadFiles(files, "input");
-                            }}
                             onChange={handleInputFileUpload}
                           />
+                          <p className="text-xs text-muted-foreground">
+                            PDFs, Grundrisse, Schnitte, etc. (Wenn Upload nicht reagiert: Seite mit <code>?debug=1</code> öffnen)
+                          </p>
                         </div>
                         
                         {filesLoading ? (
@@ -1705,51 +1669,19 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien (Output)</Label>
                       <div className="border rounded-lg p-4">
-                        <div
-                          className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
-                            isDraggingOutputFiles
-                              ? "border-primary bg-primary/5"
-                              : "border-muted-foreground/25 hover:border-primary/50"
-                          }`}
-                        >
-                          <div className="flex flex-col items-center justify-center gap-2 text-center pointer-events-none">
-                            <Upload className={`h-8 w-8 transition-colors ${isDraggingOutputFiles ? "text-primary" : "text-muted-foreground"}`} />
-                            <p className="text-sm font-medium">
-                              <span className="text-primary underline underline-offset-2">Dateien auswählen</span> oder hierher ziehen
-                            </p>
-                            <p className="text-xs text-muted-foreground">Ergebnisse, Berichte, PDFs, etc.</p>
-                          </div>
-                          <input
+                        <div className="space-y-2">
+                          <Input
                             id="project-output-file-upload"
-                            ref={outputFileInputRef}
                             type="file"
                             multiple
+                            accept=".pdf,application/pdf,image/*"
                             disabled={filesUploading}
-                            className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-[0.01]"
                             onClick={() => debugLog("output:picker:click")}
-                            onDragOver={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              if (!isDraggingOutputFiles) setIsDraggingOutputFiles(true);
-                            }}
-                            onDragEnter={() => {
-                              setIsDraggingOutputFiles(true);
-                              debugLog("output:dragEnter");
-                            }}
-                            onDragLeave={() => {
-                              setIsDraggingOutputFiles(false);
-                              debugLog("output:dragLeave");
-                            }}
-                            onDrop={async (e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setIsDraggingOutputFiles(false);
-                              const files = e.dataTransfer.files;
-                              debugLog("output:onDrop", { fileCount: files?.length || 0 });
-                              await uploadFiles(files, "output");
-                            }}
                             onChange={handleOutputFileUpload}
                           />
+                          <p className="text-xs text-muted-foreground">
+                            Ergebnisse, Berichte, PDFs, etc. (Wenn Upload nicht reagiert: Seite mit <code>?debug=1</code> öffnen)
+                          </p>
                         </div>
                         
                         {filesLoading ? (
