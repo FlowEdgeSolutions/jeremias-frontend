@@ -1077,11 +1077,10 @@ export const ProjectDetailPage = () => {
     }
   };
 
-  const uploadFiles = async (files: FileList | null, source: string) => {
-    if (!id || !files) return;
-    const selectedFiles = Array.from(files);
-    if (selectedFiles.length === 0) return;
-
+  const uploadFiles = async (selectedFiles: File[], source: string) => {
+    if (!id) return;
+    if (!selectedFiles || selectedFiles.length === 0) return;
+ 
     try {
       setFilesUploading(true);
       debugLog("files:upload:start", {
@@ -1106,10 +1105,13 @@ export const ProjectDetailPage = () => {
   };
 
   const handleInputFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+    const selectedFiles = e.target.files ? Array.from(e.target.files) : [];
+    debugLog("input:onChange", {
+      fileCount: selectedFiles.length,
+      files: selectedFiles.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+    });
     e.target.value = "";
-    debugLog("input:onChange", { fileCount: files?.length || 0 });
-    await uploadFiles(files, "input");
+    await uploadFiles(selectedFiles, "input");
   };
 
   const openProjectFile = async (file: ProjectFileInfo) => {
@@ -1173,10 +1175,13 @@ export const ProjectDetailPage = () => {
   };
 
   const handleOutputFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
+    const selectedFiles = e.target.files ? Array.from(e.target.files) : [];
+    debugLog("output:onChange", {
+      fileCount: selectedFiles.length,
+      files: selectedFiles.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+    });
     e.target.value = "";
-    debugLog("output:onChange", { fileCount: files?.length || 0 });
-    await uploadFiles(files, "output");
+    await uploadFiles(selectedFiles, "output");
   };
 
   const calculateRemainingDays = () => {
