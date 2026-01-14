@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { sevdeskApi } from "@/lib/apiClient";
+import { projectToolsApi, projectsApi, sevdeskApi } from "@/lib/apiClient";
+import type { Project } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,6 +18,11 @@ export const SettingsPage = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [categoryName, setCategoryName] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [projectNumber, setProjectNumber] = useState("");
+  const [projectLookupLoading, setProjectLookupLoading] = useState(false);
+  const [projectUpdateLoading, setProjectUpdateLoading] = useState(false);
+  const [projectInfo, setProjectInfo] = useState<Project | null>(null);
 
   const formatErrorMessage = (error: unknown) => {
     const err = error as { status?: number; message?: string };
@@ -40,6 +46,49 @@ export const SettingsPage = () => {
   useEffect(() => {
     loadCategories();
   }, []);
+
+  const lookupProject = async () => {
+    const id = projectId.trim();
+    if (!id) {
+      toast.error("Bitte Projekt-ID eingeben.");
+      return;
+    }
+    try {
+      setProjectLookupLoading(true);
+      const project = await projectsApi.getProject(id);
+      setProjectInfo(project);
+      setProjectNumber(project.project_number || "");
+      toast.success("Projekt geladen.");
+    } catch (error: unknown) {
+      setProjectInfo(null);
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setProjectLookupLoading(false);
+    }
+  };
+
+  const updateProjectNumber = async () => {
+    const id = projectId.trim();
+    const newNumber = projectNumber.trim();
+    if (!id) {
+      toast.error("Bitte Projekt-ID eingeben.");
+      return;
+    }
+    if (!newNumber) {
+      toast.error("Bitte eine neue Projektnummer eingeben.");
+      return;
+    }
+    try {
+      setProjectUpdateLoading(true);
+      const updated = await projectToolsApi.setProjectNumber(id, newNumber);
+      setProjectInfo(updated);
+      toast.success(`Projektnummer gesetzt: ${updated.project_number || newNumber}`);
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setProjectUpdateLoading(false);
+    }
+  };
 
   const handleCreate = async () => {
     const name = categoryName.trim();
@@ -68,6 +117,56 @@ export const SettingsPage = () => {
           Sevdesk-Integration verwalten und Kategorien f&uuml;r Kontakte anlegen.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Projekt-Tools</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="project-id">Projekt-ID</Label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Input
+                id="project-id"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                placeholder="UUID (z.B. f32736e2-...)"
+              />
+              <Button variant="outline" onClick={lookupProject} disabled={projectLookupLoading}>
+                {projectLookupLoading ? "Lade..." : "Laden"}
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="project-number">Projektnummer</Label>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Input
+                id="project-number"
+                value={projectNumber}
+                onChange={(e) => setProjectNumber(e.target.value)}
+                placeholder="z.B. 9500"
+              />
+              <Button onClick={updateProjectNumber} disabled={projectUpdateLoading}>
+                {projectUpdateLoading ? "Speichere..." : "Speichern"}
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              &Auml;ndert die Projektnummer (nur Admin/Sales). Muss eindeutig sein.
+            </p>
+          </div>
+
+          {projectInfo && (
+            <div className="rounded-md border p-4 text-sm">
+              <div className="text-muted-foreground">Aktuelles Projekt</div>
+              <div className="mt-1 font-medium text-foreground">
+                {projectInfo.product_name || projectInfo.productName} ({projectInfo.project_number || "-"})
+              </div>
+              <div className="mt-1 font-mono text-xs text-muted-foreground">{projectInfo.id}</div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

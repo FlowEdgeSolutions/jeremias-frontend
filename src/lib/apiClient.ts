@@ -575,6 +575,19 @@ export const sevdeskApi = {
 };
 
 // ============================================================================
+// PROJECT TOOLS API
+// ============================================================================
+
+export const projectToolsApi = {
+  async setProjectNumber(projectId: string, project_number: string): Promise<Project> {
+    return fetchApi<Project>(`/tools/projects/${projectId}/number`, {
+      method: "PATCH",
+      body: JSON.stringify({ project_number }),
+    });
+  },
+};
+
+// ============================================================================
 // USERS API (Employees)
 // ============================================================================
 
@@ -689,6 +702,7 @@ export const apiClient = {
   messages: messagesApi,
   qc: qcApi,
   sevdesk: sevdeskApi,
+  projectTools: projectToolsApi,
   users: usersApi,
   customerPortal: customerPortalApi,
 };
