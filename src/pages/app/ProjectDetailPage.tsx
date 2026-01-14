@@ -671,12 +671,6 @@ export const ProjectDetailPage = () => {
         return;
       }
       
-      // Prüfe ob Output-Checkbox aktiviert ist
-      if (false) {
-        toast.error("Bitte bestätigen Sie im Output-Bereich, dass alle Punkte der Checkliste erfüllt wurden.");
-        return;
-      }
-      
       // Zeige Bestätigungs-Dialog
       setPendingStatus(newStatus);
       setChecklistConfirmed(false);
@@ -715,10 +709,17 @@ export const ProjectDetailPage = () => {
       setIsSaving(true);
       
       // Wenn Status auf FERTIGGESTELLT gesetzt wird, setze auch qc_status auf PENDING
+      const basePayload = project?.payload || {};
+      const nextPayload = buildPayloadWithProjectNotes(buildPayloadWithOutputText(basePayload, outputText), {
+        customer: customerNotesList,
+        internal: internalNotesList,
+      });
+
       const updateData: ProjectUpdateRequest = {
         status,
         credits: allowCustomCredits ? credits : undefined,
         content,
+        payload: nextPayload,
         customer_notes: customerNotes,
         internal_notes: internalNotes,
         deadline: deadline || undefined,
@@ -753,10 +754,17 @@ export const ProjectDetailPage = () => {
       setIsSaving(true);
       
       // Wenn Status auf FERTIGGESTELLT gesetzt wird, setze auch qc_status auf PENDING
+      const basePayload = project?.payload || {};
+      const nextPayload = buildPayloadWithProjectNotes(buildPayloadWithOutputText(basePayload, outputText), {
+        customer: customerNotesList,
+        internal: internalNotesList,
+      });
+
       const updateData: ProjectUpdateRequest = {
         status,
         credits: allowCustomCredits ? credits : undefined,
         content,
+        payload: nextPayload,
         customer_notes: customerNotes,
         internal_notes: internalNotes,
         deadline: deadline || undefined,
@@ -875,7 +883,10 @@ export const ProjectDetailPage = () => {
   const persistProjectNotes = async (nextCustomer: ProjectNote[], nextInternal: ProjectNote[]) => {
     if (!id) return;
     const basePayload = project?.payload || {};
-    const nextPayload = buildPayloadWithProjectNotes(basePayload, { customer: nextCustomer, internal: nextInternal });
+    const nextPayload = buildPayloadWithProjectNotes(buildPayloadWithOutputText(basePayload, outputText), {
+      customer: nextCustomer,
+      internal: nextInternal,
+    });
     const updatedProject = await projectsApi.updateProject(id, { payload: nextPayload });
     setProject(updatedProject);
   };
@@ -1031,13 +1042,6 @@ export const ProjectDetailPage = () => {
     return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
-  const formatFileSize = (size: number) => {
-    if (!Number.isFinite(size)) return "";
-    if (size < 1024) return `${size} B`;
-    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  };
-
   const getInputFiles = () => projectFiles.filter((f) => (f.source || "unknown") !== "output");
 
   const getOutputFiles = () => projectFiles.filter((f) => (f.source || "unknown") === "output");
@@ -1135,12 +1139,6 @@ export const ProjectDetailPage = () => {
     await uploadFiles(files, "output");
   };
 
-  const handleDeleteOutputFile = async (fileId: string) => {
-    const file = projectFiles.find((f) => f.file_id === fileId);
-    if (!file) return;
-    await handleDeleteProjectFile(file);
-  };
-
   const calculateRemainingDays = () => {
     if (!deadline) return null;
     
@@ -1172,8 +1170,6 @@ export const ProjectDetailPage = () => {
     if (days === 1) return "Noch 1 Tag";
     return `Noch ${days} Tage`;
   };
-
-  const getFilteredFiles = () => getInputFiles();
 
   if (loading) {
     return (
@@ -1488,27 +1484,71 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien</Label>
                       <div className="border rounded-lg p-4">
-                        <Button variant="outline" className="w-full">
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          type="button"
+                          disabled={filesUploading}
+                          onClick={() => inputFileInputRef.current?.click()}
+                        >
                           <Upload className="h-4 w-4 mr-2" />
                           Dateien hochladen (Input)
                         </Button>
+
+                        <input
+                          ref={inputFileInputRef}
+                          type="file"
+                          multiple
+                          className="hidden"
+                          onChange={handleInputFileUpload}
+                        />
                         
-                        {getFilteredFiles().length > 0 ? (
+                        {filesLoading ? (
+                          <p className="text-sm text-muted-foreground text-center mt-4">Dateien werden geladen...</p>
+                        ) : getInputFiles().length > 0 ? (
                           <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
-                            {getFilteredFiles().map((file) => (
-                              <div key={file.id} className="flex items-center justify-between p-2 border rounded">
-                                <div className="flex items-center gap-2">
+                            {getInputFiles().map((file) => (
+                              <div key={file.file_id} className="flex items-center justify-between p-2 border rounded bg-white">
+                                <div className="flex items-center gap-2 min-w-0">
                                   <FileText className="h-4 w-4" />
-                                  <div className="flex flex-col">
-                                    <span className="text-sm">{file.filename}</span>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-sm truncate">{file.filename}</span>
                                     <span className="text-xs text-muted-foreground">
-                                      {(file.size / 1024).toFixed(1)} KB
+                                      {formatFileDate(file.uploaded_at)}
+                                      {formatFileDate(file.uploaded_at) ? " • " : ""}
+                                      {formatFileSize(file.size)}
                                     </span>
                                   </div>
                                 </div>
-                                <Button variant="ghost" size="sm">
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => openProjectFile(file)}
+                                    title="Öffnen"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => downloadProjectFile(file)}
+                                    title="Download"
+                                  >
+                                    <FileDown className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => handleDeleteProjectFile(file)}
+                                    title="Löschen"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1531,8 +1571,8 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Freitext (Output)</Label>
                       <Textarea
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
+                        value={outputText}
+                        onChange={(e) => setOutputText(e.target.value)}
                         rows={10}
                         placeholder="Ausgabe, Ergebnisse, Berichte..."
                       />
@@ -1541,36 +1581,70 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien (Output)</Label>
                       <div className="border rounded-lg p-4">
-                        <label htmlFor="output-file-upload" className="cursor-pointer">
-                          <Button variant="outline" className="w-full" type="button" onClick={() => document.getElementById('output-file-upload')?.click()}>
-                            <Upload className="h-4 w-4 mr-2" />
-                            Dateien hochladen (Output)
-                          </Button>
-                        </label>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          type="button"
+                          disabled={filesUploading}
+                          onClick={() => outputFileInputRef.current?.click()}
+                        >
+                          <Upload className="h-4 w-4 mr-2" />
+                          Dateien hochladen (Output)
+                        </Button>
                         <input
-                          id="output-file-upload"
+                          ref={outputFileInputRef}
                           type="file"
                           multiple
                           className="hidden"
                           onChange={handleOutputFileUpload}
                         />
                         
-                        {outputFiles.length > 0 ? (
+                        {filesLoading ? (
+                          <p className="text-sm text-muted-foreground text-center mt-4">Dateien werden geladen...</p>
+                        ) : getOutputFiles().length > 0 ? (
                           <div className="mt-4 space-y-2 max-h-[300px] overflow-y-auto">
-                            {outputFiles.map((file) => (
-                              <div key={file.id} className="flex items-center justify-between p-2 border rounded bg-green-50">
-                                <div className="flex items-center gap-2">
+                            {getOutputFiles().map((file) => (
+                              <div key={file.file_id} className="flex items-center justify-between p-2 border rounded bg-green-50">
+                                <div className="flex items-center gap-2 min-w-0">
                                   <FileText className="h-4 w-4 text-green-600" />
-                                  <div className="flex flex-col">
-                                    <span className="text-sm">{file.filename}</span>
+                                  <div className="flex flex-col min-w-0">
+                                    <span className="text-sm truncate">{file.filename}</span>
                                     <span className="text-xs text-muted-foreground">
-                                      {(file.size / 1024).toFixed(1)} KB
+                                      {formatFileDate(file.uploaded_at)}
+                                      {formatFileDate(file.uploaded_at) ? " • " : ""}
+                                      {formatFileSize(file.size)}
                                     </span>
                                   </div>
                                 </div>
-                                <Button variant="ghost" size="sm" onClick={() => handleDeleteOutputFile(file.id)}>
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => openProjectFile(file)}
+                                    title="Öffnen"
+                                  >
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => downloadProjectFile(file)}
+                                    title="Download"
+                                  >
+                                    <FileDown className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-8 w-8"
+                                    onClick={() => handleDeleteProjectFile(file)}
+                                    title="Löschen"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1582,22 +1656,7 @@ export const ProjectDetailPage = () => {
                       </div>
                     </div>
                     
-                    <div className="border rounded-lg p-4 bg-card">
-                      <div className="flex items-start gap-3">
-                        <Checkbox 
-                          id="output-confirm"
-                          checked={outputConfirmed}
-                          onCheckedChange={(checked) => setOutputConfirmed(checked === true)}
-                          className="mt-1"
-                        />
-                        <label 
-                          htmlFor="output-confirm" 
-                          className="text-sm font-medium leading-relaxed cursor-pointer"
-                        >
-                          Ich bestätige, dass ich mit unserer Checkliste das Projekt gegengecheckt habe und jeder einzelne Punkt erfüllt wurde.
-                        </label>
-                      </div>
-                    </div>
+                    
                   </CardContent>
                 </Card>
               </div>
@@ -2212,11 +2271,7 @@ export const ProjectDetailPage = () => {
               <p className="text-sm font-medium">Voraussetzungen:</p>
               <div className="flex items-start gap-2 text-sm">
                 <span className="text-green-500">✓</span>
-                <span>Mindestens eine Output-Datei wurde im grünen Bereich hochgeladen ({outputFiles.length} {outputFiles.length === 1 ? 'Datei' : 'Dateien'})</span>
-              </div>
-              <div className="flex items-start gap-2 text-sm">
-                <span className="text-green-500">✓</span>
-                <span>Checkliste im Output-Bereich wurde bestätigt</span>
+                <span>Mindestens eine Output-Datei wurde im grünen Bereich hochgeladen ({getOutputFiles().length} {getOutputFiles().length === 1 ? 'Datei' : 'Dateien'})</span>
               </div>
             </div>
 
