@@ -62,21 +62,21 @@ export const ProjectsPage = () => {
   const handleDeleteProject = async (event: MouseEvent<HTMLButtonElement>, projectId: string) => {
     event.stopPropagation();
 
-    if (!window.confirm("Projekt wirklich loeschen?")) {
+    if (!window.confirm("Projekt wirklich löschen?")) {
       return;
     }
 
     try {
       await apiClient.projects.deleteProject(projectId);
       setProjects((prev) => prev.filter((project) => project.id !== projectId));
-      toast.success("Projekt geloescht");
+      toast.success("Projekt gelöscht");
     } catch (error: unknown) {
       const err = error as any;
       const message = err instanceof Error ? err.message : "Unbekannter Fehler";
       if (err?.status === 403) {
         toast.error("Zugriff verweigert. Du brauchst die Rolle 'admin' oder 'sales' zum Löschen.");
       } else {
-        toast.error("Fehler beim Loeschen: " + message);
+        toast.error("Fehler beim Löschen: " + message);
       }
     }
   };
@@ -144,9 +144,9 @@ export const ProjectsPage = () => {
         <CardContent className="p-4">
           <div className="space-y-3">
             <div>
-              <div className="flex items-center justify-between">
-                <h4 className="font-semibold text-foreground">{project.product_name}</h4>
-                <div className="flex items-center gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="font-semibold text-foreground min-w-0 truncate">{project.product_name}</h4>
+                <div className="flex items-center gap-2 shrink-0">
                   {project.project_number && (
                     <span className="text-xs text-muted-foreground">{project.project_number}</span>
                   )}
@@ -156,7 +156,7 @@ export const ProjectsPage = () => {
                       size="icon"
                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
                       onClick={(event) => handleDeleteProject(event, project.id)}
-                      title="Projekt loeschen"
+                      title="Projekt löschen"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
@@ -201,12 +201,12 @@ export const ProjectsPage = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {currentUser?.role === "admin" && (
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
             <label className="text-sm font-medium">Filter nach Mitarbeiter:</label>
             <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-              <SelectTrigger className="w-[240px]">
+              <SelectTrigger className="w-full sm:w-[240px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -221,15 +221,15 @@ export const ProjectsPage = () => {
           </div>
         )}
         
-        <Button onClick={() => navigate("/app/projects/new")} className="ml-auto">
+        <Button onClick={() => navigate("/app/projects/new")} className="w-full sm:w-auto sm:ml-auto">
           <Plus className="h-4 w-4 mr-2" />
           Neues Projekt
         </Button>
       </div>
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
+      <div className="space-y-4 md:space-y-0 md:flex md:gap-4 md:overflow-x-auto md:pb-4">
         {kanbanColumns.map((column) => (
-          <div key={column.id} className="flex-shrink-0 w-80">
+          <div key={column.id} className="w-full md:flex-shrink-0 md:w-80">
             <div className="bg-muted/50 rounded-lg p-4">
               <h3 className="font-semibold mb-4">{column.title} ({column.items.length})</h3>
               <div className="space-y-3">
