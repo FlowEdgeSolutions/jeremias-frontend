@@ -1499,7 +1499,7 @@ export const ProjectDetailPage = () => {
                           ref={inputFileInputRef}
                           type="file"
                           multiple
-                          className="hidden"
+                          className="sr-only"
                           onChange={handleInputFileUpload}
                         />
                         
@@ -1595,7 +1595,7 @@ export const ProjectDetailPage = () => {
                           ref={outputFileInputRef}
                           type="file"
                           multiple
-                          className="hidden"
+                          className="sr-only"
                           onChange={handleOutputFileUpload}
                         />
                         
