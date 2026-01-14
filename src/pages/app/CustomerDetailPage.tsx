@@ -1127,9 +1127,9 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
               <TooltipTrigger asChild>
                 <p className="text-sm text-muted-foreground cursor-help">Gesamtumsatz</p>
               </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">Summe aller bezahlten Rechnungen seit Kundenbeginn</p>
-              </TooltipContent>
+                  <TooltipContent>
+                 <p className="max-w-xs">Summe aller Rechnungen seit Kundenbeginn (unabhängig vom Status)</p>
+                  </TooltipContent>
             </Tooltip>
             <p className="font-semibold text-lg">{formatCurrency(details.metrics.total_revenue)}</p>
           </div>
@@ -1138,9 +1138,9 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
               <TooltipTrigger asChild>
                 <p className="text-sm text-muted-foreground cursor-help">⌀ Monatsumsatz (gesamt)</p>
               </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">Durchschnittlicher monatlicher Umsatz über die gesamte Kundenzeit</p>
-              </TooltipContent>
+                  <TooltipContent>
+                <p className="max-w-xs">Durchschnittlicher monatlicher Umsatz über die gesamte Kundenzeit (basierend auf Rechnungen)</p>
+                  </TooltipContent>
             </Tooltip>
             <p className="font-semibold text-lg">{formatCurrency(details.metrics.average_monthly_revenue || 0)}</p>
           </div>
@@ -1149,9 +1149,9 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
               <TooltipTrigger asChild>
                 <p className="text-sm text-muted-foreground cursor-help">⌀ Monatsumsatz (2 Mon.)</p>
               </TooltipTrigger>
-              <TooltipContent>
-                <p className="max-w-xs">Durchschnittlicher monatlicher Umsatz der letzten 2 Monate (60 Tage)</p>
-              </TooltipContent>
+                  <TooltipContent>
+                <p className="max-w-xs">Durchschnittlicher monatlicher Umsatz der letzten 2 Monate (60 Tage, basierend auf Rechnungen)</p>
+                  </TooltipContent>
             </Tooltip>
             <p className="font-semibold text-lg">{formatCurrency(details.metrics.average_two_months || 0)}</p>
           </div>

@@ -144,9 +144,7 @@ export const FinancePage = () => {
     }
   };
 
-  const totalRevenue = invoices
-    .filter(inv => inv.status === "PAID")
-    .reduce((sum, inv) => sum + Number(inv.amount), 0);
+  const totalRevenue = invoices.reduce((sum, inv) => sum + Number(inv.amount), 0);
 
   const openAmount = invoices
     .filter(inv => inv.status === "SENT" || inv.status === "OVERDUE")
@@ -189,7 +187,7 @@ export const FinancePage = () => {
               title="Gesamtumsatz"
               value={`${formatMoney(totalRevenue)} €`}
               icon={Euro}
-              description="Bezahlte Rechnungen"
+              description="Alle Rechnungen"
             />
             <StatCard
               title="Offene Summe"
@@ -427,7 +425,7 @@ export const FinancePage = () => {
               title="Gesamtumsatz"
               value={`${totalRevenue.toLocaleString("de-DE")} €`}
               icon={Euro}
-              description="Bezahlte Rechnungen"
+              description="Alle Rechnungen"
             />
             <StatCard
               title="Offene Summe"
