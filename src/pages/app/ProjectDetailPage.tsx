@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { projectsApi, customersApi, invoicesApi, qcApi } from "@/lib/apiClient";
-import type { ProjectUpdateRequest } from "@/lib/apiClient";
+import { projectsApi, customersApi, invoicesApi, qcApi, filesApi } from "@/lib/apiClient";
+import type { ProjectUpdateRequest, ProjectFileInfo } from "@/lib/apiClient";
 import { Project, Customer, ProjectStatus, User, Invoice } from "@/types";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -129,12 +129,26 @@ export const ProjectDetailPage = () => {
       },
     } satisfies Record<string, unknown>;
   };
+
+  const extractOutputTextFromPayload = (payload?: Record<string, unknown>) => {
+    if (!payload) return "";
+    const value = payload["output_text"];
+    return typeof value === "string" ? value : "";
+  };
+
+  const buildPayloadWithOutputText = (basePayload: Record<string, unknown> | undefined, nextOutputText: string) => {
+    return {
+      ...(basePayload || {}),
+      output_text: nextOutputText,
+    } satisfies Record<string, unknown>;
+  };
   
   // Editable fields
   const [projectNumber, setProjectNumber] = useState("");
   const [status, setStatus] = useState<ProjectStatus>("IN_BEARBEITUNG");
   const [credits, setCredits] = useState("");
   const [content, setContent] = useState("");
+  const [outputText, setOutputText] = useState("");
   const [customerNotes, setCustomerNotes] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [deadline, setDeadline] = useState<string>(""); // Frist/Deadline
@@ -152,9 +166,9 @@ export const ProjectDetailPage = () => {
   const [newCustomerNote, setNewCustomerNote] = useState("");
   const [newInternalNote, setNewInternalNote] = useState("");
   
-  // Output files (separate from input files)
-  const [outputFiles, setOutputFiles] = useState<Array<{id: string; filename: string; size: number; uploaded_at: string}>>([]);
-  const [outputConfirmed, setOutputConfirmed] = useState(false);
+  const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
+  const [filesLoading, setFilesLoading] = useState(false);
+  const [filesUploading, setFilesUploading] = useState(false);
   
   // Determine if credits can be manually edited based on product
   const [allowCustomCredits, setAllowCustomCredits] = useState(false);
@@ -164,9 +178,6 @@ export const ProjectDetailPage = () => {
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [activeNoteField, setActiveNoteField] = useState<'customer' | 'internal' | null>(null);
   
-  // File category filter
-  const [fileCategory, setFileCategory] = useState<'all' | 'customer' | 'creation' | 'detail'>('all');
-
   // Confirmation dialog state
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [pendingStatus, setPendingStatus] = useState<ProjectStatus | null>(null);
@@ -188,6 +199,8 @@ export const ProjectDetailPage = () => {
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const inputFileInputRef = useRef<HTMLInputElement>(null);
+  const outputFileInputRef = useRef<HTMLInputElement>(null);
 
   const formatErrorMessage = (error: unknown) => {
     const err = error as { status?: number; message?: string };
@@ -258,7 +271,20 @@ export const ProjectDetailPage = () => {
     }, 2000); // Speichert 2 Sekunden nach der letzten Änderung
 
     return () => clearTimeout(timeoutId);
-  }, [status, credits, content, customerNotes, internalNotes, deadline, additionalEmail, outputFiles]);
+  }, [
+    status,
+    credits,
+    content,
+    outputText,
+    customerNotes,
+    internalNotes,
+    deadline,
+    additionalEmail,
+    projectStreet,
+    projectZipCode,
+    projectCity,
+    projectCountry,
+  ]);
 
   const loadProject = async () => {
     if (!id) return;
@@ -282,6 +308,7 @@ export const ProjectDetailPage = () => {
       setStatus(projectData.status);
       setCredits(projectData.credits || "");
       setContent(projectData.content || "");
+      setOutputText(extractOutputTextFromPayload(projectData.payload));
       setCustomerNotes(projectData.customer_notes || "");
       setInternalNotes(projectData.internal_notes || "");
       setDeadline(projectData.deadline || "");
@@ -300,6 +327,18 @@ export const ProjectDetailPage = () => {
       // Check if product allows custom credits
       const creditsAllowedProducts = ["HEIZLAST", "HEIZLAST_HYDRAULISCH", "ISFP_ERSTELLUNG", "INDIVIDUELL"];
       setAllowCustomCredits(creditsAllowedProducts.includes(projectData.product_code));
+
+      // Load files for this project
+      try {
+        setFilesLoading(true);
+        const files = await filesApi.listProjectFiles(projectData.id);
+        setProjectFiles(files || []);
+      } catch (err) {
+        console.error("Failed to load project files:", err);
+        setProjectFiles([]);
+      } finally {
+        setFilesLoading(false);
+      }
 
       // Load invoice for this project (if available)
       try {
@@ -625,7 +664,7 @@ export const ProjectDetailPage = () => {
     // Wenn "FERTIGGESTELLT" ausgewählt wird, prüfe Voraussetzungen
     if (newStatus === "FERTIGGESTELLT") {
       // Prüfe ob Output-Dateien vorhanden sind
-      const hasOutputFiles = outputFiles && outputFiles.length > 0;
+      const hasOutputFiles = getOutputFiles().length > 0;
       
       if (!hasOutputFiles) {
         toast.error("Es muss mindestens eine Datei im Output-Bereich hochgeladen werden, bevor das Projekt als 'Fertiggestellt' markiert werden kann.");
@@ -633,7 +672,7 @@ export const ProjectDetailPage = () => {
       }
       
       // Prüfe ob Output-Checkbox aktiviert ist
-      if (!outputConfirmed) {
+      if (false) {
         toast.error("Bitte bestätigen Sie im Output-Bereich, dass alle Punkte der Checkliste erfüllt wurden.");
         return;
       }
@@ -985,23 +1024,121 @@ export const ProjectDetailPage = () => {
     return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
   };
 
-  const handleOutputFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const filesArray = Array.from(e.target.files);
-      const newFiles = filesArray.map(file => ({
-        id: crypto.randomUUID(),
-        filename: file.name,
-        size: file.size,
-        uploaded_at: new Date().toISOString(),
-      }));
-      setOutputFiles(prev => [...prev, ...newFiles]);
-      toast.success(`${filesArray.length} Datei(en) hochgeladen`);
+  const formatFileDate = (dateString?: string | null) => {
+    if (!dateString) return "";
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+
+  const formatFileSize = (size: number) => {
+    if (!Number.isFinite(size)) return "";
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / 1024 / 1024).toFixed(1)} MB`;
+  };
+
+  const getInputFiles = () => projectFiles.filter((f) => (f.source || "unknown") !== "output");
+
+  const getOutputFiles = () => projectFiles.filter((f) => (f.source || "unknown") === "output");
+
+  const refreshProjectFiles = async () => {
+    if (!id) return;
+    try {
+      setFilesLoading(true);
+      const files = await filesApi.listProjectFiles(id);
+      setProjectFiles(files || []);
+    } catch (error) {
+      console.error("Failed to refresh project files:", error);
+    } finally {
+      setFilesLoading(false);
     }
   };
 
-  const handleDeleteOutputFile = (id: string) => {
-    setOutputFiles(prev => prev.filter(file => file.id !== id));
-    toast.success("Datei gelöscht");
+  const uploadFiles = async (files: FileList | null, source: string) => {
+    if (!id || !files) return;
+    const selectedFiles = Array.from(files);
+    if (selectedFiles.length === 0) return;
+
+    try {
+      setFilesUploading(true);
+      for (const file of selectedFiles) {
+        await filesApi.uploadProjectFile(id, file, source);
+      }
+      toast.success(`${selectedFiles.length} Datei(en) hochgeladen`);
+      await refreshProjectFiles();
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setFilesUploading(false);
+    }
+  };
+
+  const handleInputFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    e.target.value = "";
+    await uploadFiles(files, "input");
+  };
+
+  const openProjectFile = async (file: ProjectFileInfo) => {
+    if (!id) return;
+    try {
+      const url =
+        file.download_url ||
+        (await filesApi.getProjectFileUrl(id, file.file_id, 2)).download_url;
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (error: unknown) {
+      try {
+        const blob = await filesApi.downloadProjectFile(id, file.file_id);
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank", "noopener,noreferrer");
+        setTimeout(() => URL.revokeObjectURL(url), 30_000);
+      } catch (fallbackError: unknown) {
+        toast.error(formatErrorMessage(fallbackError));
+      }
+    }
+  };
+
+  const downloadProjectFile = async (file: ProjectFileInfo) => {
+    if (!id) return;
+    try {
+      const blob = await filesApi.downloadProjectFile(id, file.file_id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = file.filename || `Datei-${file.file_id}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    }
+  };
+
+  const handleDeleteProjectFile = async (file: ProjectFileInfo) => {
+    if (!id) return;
+    if (!window.confirm(`Datei wirklich löschen?\n\n${file.filename}`)) return;
+
+    try {
+      await filesApi.deleteProjectFile(id, file.file_id);
+      toast.success("Datei gelöscht");
+      await refreshProjectFiles();
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    }
+  };
+
+  const handleOutputFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    e.target.value = "";
+    await uploadFiles(files, "output");
+  };
+
+  const handleDeleteOutputFile = async (fileId: string) => {
+    const file = projectFiles.find((f) => f.file_id === fileId);
+    if (!file) return;
+    await handleDeleteProjectFile(file);
   };
 
   const calculateRemainingDays = () => {
@@ -1036,19 +1173,7 @@ export const ProjectDetailPage = () => {
     return `Noch ${days} Tage`;
   };
 
-  const getFilteredFiles = () => {
-    if (!project.files) return [];
-    
-    if (fileCategory === 'all') return project.files;
-    
-    return project.files.filter(file => {
-      // files haben ein 'source' Feld
-      // 'customer' = vom Kunden hochgeladen
-      // 'creation' = bei Projekterstellung hochgeladen
-      // 'detail' = in Großansicht hochgeladen
-      return file.source === fileCategory;
-    });
-  };
+  const getFilteredFiles = () => getInputFiles();
 
   if (loading) {
     return (

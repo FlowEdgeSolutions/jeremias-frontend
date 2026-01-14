@@ -98,6 +98,38 @@ async function fetchApi<T>(
   }
 }
 
+async function fetchApiResponse(
+  endpoint: string,
+  options: RequestInit = {}
+): Promise<Response> {
+  const token = getToken();
+  const headers: HeadersInit = {
+    ...options.headers,
+  };
+
+  if (token) {
+    headers["Authorization"] = `Bearer ${token}`;
+  }
+
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    try {
+      const errorData = await response.json();
+      errorMessage = errorData.detail || errorMessage;
+    } catch {
+      // ignore
+    }
+    throw new ApiError(response.status, errorMessage);
+  }
+
+  return response;
+}
+
 // ============================================================================
 // AUTH API
 // ============================================================================
@@ -438,6 +470,81 @@ export const projectsApi = {
       method: "POST",
       body: JSON.stringify({ status }),
     });
+  },
+};
+
+// ============================================================================
+// FILES API
+// ============================================================================
+
+export interface FileUploadResponse {
+  file_id: string;
+  filename: string;
+  blob_path: string;
+  size: number;
+  content_type: string;
+  uploaded_at: string;
+  download_url?: string | null;
+}
+
+export interface ProjectFileInfo {
+  file_id: string;
+  filename: string;
+  blob_path: string;
+  size: number;
+  content_type?: string | null;
+  uploaded_at: string;
+  last_modified?: string | null;
+  download_url?: string | null;
+  source?: string | null;
+}
+
+export interface ProjectFileUrlResponse {
+  download_url: string;
+  filename: string;
+  expires_in_hours: number;
+}
+
+export interface DeleteFileResponse {
+  success: boolean;
+  message: string;
+}
+
+export const filesApi = {
+  async listProjectFiles(projectId: string): Promise<ProjectFileInfo[]> {
+    return fetchApi<ProjectFileInfo[]>(`/files/project/${projectId}`);
+  },
+
+  async uploadProjectFile(projectId: string, file: File, source?: string): Promise<FileUploadResponse> {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (source) formData.append("source", source);
+
+    const response = await fetchApiResponse(`/files/upload/${projectId}`, {
+      method: "POST",
+      body: formData,
+    });
+
+    return response.json();
+  },
+
+  async deleteProjectFile(projectId: string, fileId: string): Promise<DeleteFileResponse> {
+    return fetchApi<DeleteFileResponse>(`/files/delete/${projectId}/${fileId}`, { method: "DELETE" });
+  },
+
+  async getProjectFileUrl(
+    projectId: string,
+    fileId: string,
+    expiresInHours: number = 1
+  ): Promise<ProjectFileUrlResponse> {
+    return fetchApi<ProjectFileUrlResponse>(
+      `/files/url/${projectId}/${fileId}?expires_in_hours=${encodeURIComponent(String(expiresInHours))}`
+    );
+  },
+
+  async downloadProjectFile(projectId: string, fileId: string): Promise<Blob> {
+    const response = await fetchApiResponse(`/files/download/${projectId}/${fileId}`, { method: "GET" });
+    return response.blob();
   },
 };
 
