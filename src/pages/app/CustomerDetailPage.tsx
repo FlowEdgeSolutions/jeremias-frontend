@@ -129,6 +129,7 @@ export const CustomerDetailPage = () => {
     first_name: "",
     last_name: "",
     company_name: "",
+    salutation: "Herr",
     email: "",
     phone: "",
     website: "",
@@ -834,6 +835,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       first_name: details.customer.first_name || "",
       last_name: details.customer.last_name || "",
       company_name: details.customer.company_name || "",
+      salutation: details.customer.salutation || "Herr",
       email: details.customer.email,
       phone: details.customer.phone || "",
       website: details.customer.website || "",
@@ -1215,6 +1217,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
             <CardContent className="space-y-4">
               {renderEditableField("Vorname", "first_name", details.customer.first_name)}
               {renderEditableField("Nachname", "last_name", details.customer.last_name)}
+              {renderEditableField("Anrede", "salutation", details.customer.salutation)}
               {renderEditableField("Firmenname", "company_name", details.customer.company_name)}
               {renderEditableField("E-Mail", "email", details.customer.email)}
               {renderEditableField("Telefon", "phone", details.customer.phone)}

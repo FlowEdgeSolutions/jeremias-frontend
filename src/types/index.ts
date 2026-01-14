@@ -38,6 +38,7 @@ export interface Customer {
   name: string;
   first_name?: string;
   last_name?: string;
+  salutation?: string;
   email: string;
   phone?: string;
   company_name?: string;
@@ -177,6 +178,7 @@ export interface CustomerDetails {
     first_name?: string;
     last_name?: string;
     company_name?: string;
+    salutation?: string;
     email: string;
     phone?: string;
     website?: string;

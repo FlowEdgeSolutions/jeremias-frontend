@@ -86,6 +86,49 @@ export const ProjectDetailPage = () => {
   const [projectInvoice, setProjectInvoice] = useState<Invoice | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [qcActionLoading, setQcActionLoading] = useState(false);
+
+  type ProjectNote = { id: string; text: string; created_at: string };
+
+  const extractProjectNotesFromPayload = (payload?: Record<string, unknown>) => {
+    const empty = { customer: [] as ProjectNote[], internal: [] as ProjectNote[] };
+    if (!payload) return empty;
+    const crmNotes = payload["crm_notes"];
+    if (!crmNotes || typeof crmNotes !== "object" || Array.isArray(crmNotes)) return empty;
+    const crmNotesRecord = crmNotes as Record<string, unknown>;
+
+    const normalize = (value: unknown): ProjectNote[] => {
+      if (!Array.isArray(value)) return [];
+      return value
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") return null;
+          const record = entry as Record<string, unknown>;
+          const noteId = typeof record["id"] === "string" ? record["id"] : null;
+          const text = typeof record["text"] === "string" ? record["text"] : null;
+          const createdAt = typeof record["created_at"] === "string" ? record["created_at"] : null;
+          if (!noteId || !text || !createdAt) return null;
+          return { id: noteId, text, created_at: createdAt } as ProjectNote;
+        })
+        .filter(Boolean) as ProjectNote[];
+    };
+
+    return {
+      customer: normalize(crmNotesRecord["customer"]),
+      internal: normalize(crmNotesRecord["internal"]),
+    };
+  };
+
+  const buildPayloadWithProjectNotes = (
+    basePayload: Record<string, unknown> | undefined,
+    notes: { customer: ProjectNote[]; internal: ProjectNote[] }
+  ) => {
+    return {
+      ...(basePayload || {}),
+      crm_notes: {
+        customer: notes.customer,
+        internal: notes.internal,
+      },
+    } satisfies Record<string, unknown>;
+  };
   
   // Editable fields
   const [projectNumber, setProjectNumber] = useState("");
@@ -243,6 +286,10 @@ export const ProjectDetailPage = () => {
       setInternalNotes(projectData.internal_notes || "");
       setDeadline(projectData.deadline || "");
       setAdditionalEmail(projectData.additional_email || "");
+
+      const loadedNotes = extractProjectNotesFromPayload(projectData.payload);
+      setCustomerNotesList(loadedNotes.customer);
+      setInternalNotesList(loadedNotes.internal);
       
       // Objektadresse
       setProjectStreet(projectData.project_street || "");
@@ -786,7 +833,15 @@ export const ProjectDetailPage = () => {
     }
   };
 
-  const handleAddCustomerNote = () => {
+  const persistProjectNotes = async (nextCustomer: ProjectNote[], nextInternal: ProjectNote[]) => {
+    if (!id) return;
+    const basePayload = project?.payload || {};
+    const nextPayload = buildPayloadWithProjectNotes(basePayload, { customer: nextCustomer, internal: nextInternal });
+    const updatedProject = await projectsApi.updateProject(id, { payload: nextPayload });
+    setProject(updatedProject);
+  };
+
+  const handleAddCustomerNote = async () => {
     if (!newCustomerNote.trim()) return;
     
     const newNote = {
@@ -795,12 +850,21 @@ export const ProjectDetailPage = () => {
       created_at: new Date().toISOString(),
     };
     
-    setCustomerNotesList(prev => [newNote, ...prev]);
+    const nextCustomerNotes = [newNote, ...customerNotesList];
+    setCustomerNotesList(nextCustomerNotes);
     setNewCustomerNote("");
+    try {
+      await persistProjectNotes(nextCustomerNotes, internalNotesList);
+    } catch (error: unknown) {
+      setCustomerNotesList((prev) => prev.filter((note) => note.id !== newNote.id));
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Speichern der Notiz: " + message);
+      return;
+    }
     toast.success("Kundennotiz hinzugefügt");
   };
 
-  const handleAddInternalNote = () => {
+  const handleAddInternalNote = async () => {
     if (!newInternalNote.trim()) return;
     
     const newNote = {
@@ -809,18 +873,47 @@ export const ProjectDetailPage = () => {
       created_at: new Date().toISOString(),
     };
     
-    setInternalNotesList(prev => [newNote, ...prev]);
+    const nextInternalNotes = [newNote, ...internalNotesList];
+    setInternalNotesList(nextInternalNotes);
     setNewInternalNote("");
+    try {
+      await persistProjectNotes(customerNotesList, nextInternalNotes);
+    } catch (error: unknown) {
+      setInternalNotesList((prev) => prev.filter((note) => note.id !== newNote.id));
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Speichern der Notiz: " + message);
+      return;
+    }
     toast.success("Interne Notiz hinzugefügt");
   };
 
-  const handleDeleteCustomerNote = (id: string) => {
-    setCustomerNotesList(prev => prev.filter(note => note.id !== id));
+  const handleDeleteCustomerNote = async (id: string) => {
+    const previous = customerNotesList;
+    const nextCustomerNotes = customerNotesList.filter(note => note.id !== id);
+    setCustomerNotesList(nextCustomerNotes);
+    try {
+      await persistProjectNotes(nextCustomerNotes, internalNotesList);
+    } catch (error: unknown) {
+      setCustomerNotesList(previous);
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Speichern: " + message);
+      return;
+    }
     toast.success("Notiz gelöscht");
   };
 
-  const handleDeleteInternalNote = (id: string) => {
-    setInternalNotesList(prev => prev.filter(note => note.id !== id));
+  const handleDeleteInternalNote = async (id: string) => {
+    const previous = internalNotesList;
+    const nextInternalNotes = internalNotesList.filter(note => note.id !== id);
+    setInternalNotesList(nextInternalNotes);
+    try {
+      await persistProjectNotes(customerNotesList, nextInternalNotes);
+    } catch (error: unknown) {
+      setInternalNotesList(previous);
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      toast.error("Fehler beim Speichern: " + message);
+      return;
+    }
     toast.success("Notiz gelöscht");
   };
 

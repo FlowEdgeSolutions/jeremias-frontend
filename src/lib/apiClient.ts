@@ -244,6 +244,7 @@ export interface CustomerCreateRequest {
   phone?: string;
   segment: Segment;
   stage?: PipelineStage;
+  salutation?: string;
 }
 
 export interface CustomerUpdateRequest {
@@ -259,6 +260,7 @@ export interface CustomerUpdateRequest {
   city?: string;
   postal_code?: string;
   tax_number?: string;
+  salutation?: string;
   segment?: Segment;
   stage?: PipelineStage;
 }
