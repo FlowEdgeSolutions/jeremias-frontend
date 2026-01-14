@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Save, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox, Eye, ExternalLink } from "lucide-react";
+import { ArrowLeft, Save, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox, Eye, ExternalLink, Upload, Loader2 } from "lucide-react";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 
@@ -186,6 +186,11 @@ export const ProjectDetailPage = () => {
   const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesUploading, setFilesUploading] = useState(false);
+  const [isDraggingInputFiles, setIsDraggingInputFiles] = useState(false);
+  const [isDraggingOutputFiles, setIsDraggingOutputFiles] = useState(false);
+  const [previewFileId, setPreviewFileId] = useState<string | null>(null);
+  const [previewFileUrl, setPreviewFileUrl] = useState<string | null>(null);
+  const [previewFileLoading, setPreviewFileLoading] = useState(false);
   
   // Determine if credits can be manually edited based on product
   const [allowCustomCredits, setAllowCustomCredits] = useState(false);
@@ -235,6 +240,14 @@ export const ProjectDetailPage = () => {
       setSignatures(JSON.parse(savedSignatures));
     }
   }, [id]);
+
+  useEffect(() => {
+    return () => {
+      if (previewFileUrl) {
+        URL.revokeObjectURL(previewFileUrl);
+      }
+    };
+  }, [previewFileUrl]);
   
   const loadEmailAccounts = async () => {
     try {
@@ -1104,6 +1117,53 @@ export const ProjectDetailPage = () => {
     }
   };
 
+  const getPreviewableType = (file: ProjectFileInfo): "pdf" | "image" | "other" => {
+    const filename = (file.filename || "").toLowerCase();
+    const contentType = (file.content_type || "").toLowerCase();
+    if (contentType.includes("pdf") || filename.endsWith(".pdf")) return "pdf";
+    if (contentType.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(filename)) return "image";
+    return "other";
+  };
+
+  const toggleProjectFilePreview = async (file: ProjectFileInfo) => {
+    if (!id) return;
+
+    const type = getPreviewableType(file);
+    if (type === "other") {
+      toast.error("Vorschau nicht verfügbar – bitte downloaden.");
+      return;
+    }
+
+    if (previewFileId === file.file_id) {
+      if (previewFileUrl) URL.revokeObjectURL(previewFileUrl);
+      setPreviewFileId(null);
+      setPreviewFileUrl(null);
+      return;
+    }
+
+    setPreviewFileId(file.file_id);
+    setPreviewFileLoading(true);
+    debugLog("files:preview:start", { file_id: file.file_id, filename: file.filename });
+
+    if (previewFileUrl) {
+      URL.revokeObjectURL(previewFileUrl);
+      setPreviewFileUrl(null);
+    }
+
+    try {
+      const blob = await filesApi.downloadProjectFile(id, file.file_id);
+      const url = URL.createObjectURL(blob);
+      setPreviewFileUrl(url);
+      debugLog("files:preview:success", { file_id: file.file_id });
+    } catch (error: unknown) {
+      debugLog("files:preview:error", error);
+      toast.error(formatErrorMessage(error));
+      setPreviewFileId(null);
+    } finally {
+      setPreviewFileLoading(false);
+    }
+  };
+
   const handleInputFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = e.target.files ? Array.from(e.target.files) : [];
     debugLog("input:onChange", {
@@ -1561,7 +1621,7 @@ export const ProjectDetailPage = () => {
             </TabsList>
 
             <TabsContent value="content" className="mt-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {/* Input Section */}
                 <Card className="border-blue-200 bg-blue-50/30">
                   <CardHeader className="bg-blue-100/50">
@@ -1581,19 +1641,51 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien</Label>
                       <div className="border rounded-lg p-4">
-                        <div className="space-y-2">
-                          <Input
+                        <div
+                          className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
+                            isDraggingInputFiles ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
+                          }`}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!filesUploading) setIsDraggingInputFiles(true);
+                          }}
+                          onDragEnter={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!filesUploading) setIsDraggingInputFiles(true);
+                          }}
+                          onDragLeave={() => setIsDraggingInputFiles(false)}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDraggingInputFiles(false);
+                            if (filesUploading) return;
+                            const droppedFiles = Array.from(e.dataTransfer.files || []);
+                            debugLog("input:onDrop", { fileCount: droppedFiles.length });
+                            await uploadFiles(droppedFiles, "input");
+                          }}
+                        >
+                          <label
+                            htmlFor="project-input-file-upload"
+                            className="flex flex-col items-center justify-center gap-2 text-center cursor-pointer"
+                          >
+                            <Upload className={`h-8 w-8 transition-colors ${isDraggingInputFiles ? "text-primary" : "text-muted-foreground"}`} />
+                            <p className="text-sm font-medium">
+                              <span className="text-primary underline underline-offset-2">Dateien auswählen</span> oder hierher ziehen
+                            </p>
+                            <p className="text-xs text-muted-foreground">PDFs, Grundrisse, Schnitte, etc.</p>
+                          </label>
+                          <input
                             id="project-input-file-upload"
                             type="file"
                             multiple
                             accept=".pdf,application/pdf,image/*"
                             disabled={filesUploading}
+                            className="sr-only"
                             onClick={() => debugLog("input:picker:click")}
                             onChange={handleInputFileUpload}
                           />
-                          <p className="text-xs text-muted-foreground">
-                            PDFs, Grundrisse, Schnitte, etc. (Wenn Upload nicht reagiert: Seite mit <code>?debug=1</code> öffnen)
-                          </p>
                         </div>
                         
                         {filesLoading ? (
@@ -1614,28 +1706,17 @@ export const ProjectDetailPage = () => {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => openProjectFile(file)}
-                                    title="Öffnen"
-                                  >
-                                    <Eye className="h-4 w-4" />
+                                  <Button variant="outline" size="sm" onClick={() => toggleProjectFilePreview(file)} title="Ansehen">
+                                    <FileText className="h-4 w-4 mr-1" />
+                                    {previewFileId === file.file_id ? "Schliessen" : "Ansehen"}
+                                  </Button>
+                                  <Button variant="outline" size="sm" onClick={() => downloadProjectFile(file)} title="Download">
+                                    <FileDown className="h-4 w-4 mr-1" />
+                                    Download
                                   </Button>
                                   <Button
                                     variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => downloadProjectFile(file)}
-                                    title="Download"
-                                  >
-                                    <FileDown className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
+                                    size="sm"
                                     onClick={() => handleDeleteProjectFile(file)}
                                     title="Löschen"
                                   >
@@ -1649,6 +1730,31 @@ export const ProjectDetailPage = () => {
                           <p className="text-sm text-muted-foreground text-center mt-4">
                             Noch keine Dateien hochgeladen
                           </p>
+                        )}
+
+                        {previewFileId && getInputFiles().some((f) => f.file_id === previewFileId) && (
+                          <div className="mt-4">
+                            {previewFileLoading ? (
+                              <div className="flex items-center justify-center py-10 text-muted-foreground">
+                                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                                Vorschau wird geladen...
+                              </div>
+                            ) : previewFileUrl ? (
+                              <div className="w-full h-[60vh]">
+                                {getPreviewableType(getInputFiles().find((f) => f.file_id === previewFileId)!) === "image" ? (
+                                  <img
+                                    alt="Vorschau"
+                                    src={previewFileUrl}
+                                    className="w-full h-full object-contain rounded-md border bg-white"
+                                  />
+                                ) : (
+                                  <iframe title="Datei Vorschau" src={previewFileUrl} className="w-full h-full rounded-md border bg-white" />
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground py-6 text-center">Vorschau nicht verfügbar</div>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1674,19 +1780,51 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien (Output)</Label>
                       <div className="border rounded-lg p-4">
-                        <div className="space-y-2">
-                          <Input
+                        <div
+                          className={`relative border-2 border-dashed rounded-lg p-6 transition-colors ${
+                            isDraggingOutputFiles ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
+                          }`}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!filesUploading) setIsDraggingOutputFiles(true);
+                          }}
+                          onDragEnter={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!filesUploading) setIsDraggingOutputFiles(true);
+                          }}
+                          onDragLeave={() => setIsDraggingOutputFiles(false)}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDraggingOutputFiles(false);
+                            if (filesUploading) return;
+                            const droppedFiles = Array.from(e.dataTransfer.files || []);
+                            debugLog("output:onDrop", { fileCount: droppedFiles.length });
+                            await uploadFiles(droppedFiles, "output");
+                          }}
+                        >
+                          <label
+                            htmlFor="project-output-file-upload"
+                            className="flex flex-col items-center justify-center gap-2 text-center cursor-pointer"
+                          >
+                            <Upload className={`h-8 w-8 transition-colors ${isDraggingOutputFiles ? "text-primary" : "text-muted-foreground"}`} />
+                            <p className="text-sm font-medium">
+                              <span className="text-primary underline underline-offset-2">Dateien auswählen</span> oder hierher ziehen
+                            </p>
+                            <p className="text-xs text-muted-foreground">Ergebnisse, Berichte, PDFs, etc.</p>
+                          </label>
+                          <input
                             id="project-output-file-upload"
                             type="file"
                             multiple
                             accept=".pdf,application/pdf,image/*"
                             disabled={filesUploading}
+                            className="sr-only"
                             onClick={() => debugLog("output:picker:click")}
                             onChange={handleOutputFileUpload}
                           />
-                          <p className="text-xs text-muted-foreground">
-                            Ergebnisse, Berichte, PDFs, etc. (Wenn Upload nicht reagiert: Seite mit <code>?debug=1</code> öffnen)
-                          </p>
                         </div>
                         
                         {filesLoading ? (
@@ -1707,28 +1845,17 @@ export const ProjectDetailPage = () => {
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1 shrink-0">
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => openProjectFile(file)}
-                                    title="Öffnen"
-                                  >
-                                    <Eye className="h-4 w-4" />
+                                  <Button variant="outline" size="sm" onClick={() => toggleProjectFilePreview(file)} title="Ansehen">
+                                    <FileText className="h-4 w-4 mr-1" />
+                                    {previewFileId === file.file_id ? "Schliessen" : "Ansehen"}
+                                  </Button>
+                                  <Button variant="outline" size="sm" onClick={() => downloadProjectFile(file)} title="Download">
+                                    <FileDown className="h-4 w-4 mr-1" />
+                                    Download
                                   </Button>
                                   <Button
                                     variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
-                                    onClick={() => downloadProjectFile(file)}
-                                    title="Download"
-                                  >
-                                    <FileDown className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-8 w-8"
+                                    size="sm"
                                     onClick={() => handleDeleteProjectFile(file)}
                                     title="Löschen"
                                   >
@@ -1742,6 +1869,31 @@ export const ProjectDetailPage = () => {
                           <p className="text-sm text-muted-foreground text-center mt-4">
                             Noch keine Output-Dateien hochgeladen
                           </p>
+                        )}
+
+                        {previewFileId && getOutputFiles().some((f) => f.file_id === previewFileId) && (
+                          <div className="mt-4">
+                            {previewFileLoading ? (
+                              <div className="flex items-center justify-center py-10 text-muted-foreground">
+                                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                                Vorschau wird geladen...
+                              </div>
+                            ) : previewFileUrl ? (
+                              <div className="w-full h-[60vh]">
+                                {getPreviewableType(getOutputFiles().find((f) => f.file_id === previewFileId)!) === "image" ? (
+                                  <img
+                                    alt="Vorschau"
+                                    src={previewFileUrl}
+                                    className="w-full h-full object-contain rounded-md border bg-white"
+                                  />
+                                ) : (
+                                  <iframe title="Datei Vorschau" src={previewFileUrl} className="w-full h-full rounded-md border bg-white" />
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground py-6 text-center">Vorschau nicht verfügbar</div>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
