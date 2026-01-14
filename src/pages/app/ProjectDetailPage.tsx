@@ -186,6 +186,8 @@ export const ProjectDetailPage = () => {
   const [projectFiles, setProjectFiles] = useState<ProjectFileInfo[]>([]);
   const [filesLoading, setFilesLoading] = useState(false);
   const [filesUploading, setFilesUploading] = useState(false);
+  const [isDraggingInputFiles, setIsDraggingInputFiles] = useState(false);
+  const [isDraggingOutputFiles, setIsDraggingOutputFiles] = useState(false);
   
   // Determine if credits can be manually edited based on product
   const [allowCustomCredits, setAllowCustomCredits] = useState(false);
@@ -1114,6 +1116,15 @@ export const ProjectDetailPage = () => {
     await uploadFiles(files, "input");
   };
 
+  const handleInputDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingInputFiles(false);
+    const files = e.dataTransfer.files;
+    debugLog("input:onDrop", { fileCount: files?.length || 0 });
+    await uploadFiles(files, "input");
+  };
+
   const openProjectFile = async (file: ProjectFileInfo) => {
     if (!id) return;
     try {
@@ -1178,6 +1189,15 @@ export const ProjectDetailPage = () => {
     const files = e.target.files;
     e.target.value = "";
     debugLog("output:onChange", { fileCount: files?.length || 0 });
+    await uploadFiles(files, "output");
+  };
+
+  const handleOutputDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOutputFiles(false);
+    const files = e.dataTransfer.files;
+    debugLog("output:onDrop", { fileCount: files?.length || 0 });
     await uploadFiles(files, "output");
   };
 
@@ -1578,24 +1598,48 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien</Label>
                       <div className="border rounded-lg p-4">
-                        <input
-                          id="project-input-file-upload"
-                          ref={inputFileInputRef}
-                          type="file"
-                          multiple
-                          className="sr-only"
-                          onChange={handleInputFileUpload}
-                        />
-
-                        <Button asChild variant="outline" className="w-full" type="button">
-                          <label
-                            htmlFor="project-input-file-upload"
-                            onClick={() => debugLog("input:buttonClick", { disabled: filesUploading })}
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            Dateien hochladen (Input)
-                          </label>
-                        </Button>
+                        <div
+                          className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+                            isDraggingInputFiles
+                              ? "border-primary bg-primary/5"
+                              : "border-muted-foreground/25 hover:border-primary/50"
+                          }`}
+                          onDragEnter={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDraggingInputFiles(true);
+                            debugLog("input:dragEnter");
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!isDraggingInputFiles) setIsDraggingInputFiles(true);
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDraggingInputFiles(false);
+                            debugLog("input:dragLeave");
+                          }}
+                          onDrop={handleInputDrop}
+                        >
+                          <div className="flex flex-col items-center justify-center gap-2 text-center">
+                            <Upload className={`h-8 w-8 transition-colors ${isDraggingInputFiles ? "text-primary" : "text-muted-foreground"}`} />
+                            <Label htmlFor="project-input-file-upload" className="cursor-pointer text-primary hover:underline">
+                              Dateien auswählen
+                            </Label>
+                            <p className="text-xs text-muted-foreground">oder Dateien hierher ziehen</p>
+                          </div>
+                          <Input
+                            id="project-input-file-upload"
+                            ref={inputFileInputRef}
+                            type="file"
+                            multiple
+                            onChange={handleInputFileUpload}
+                            className="hidden"
+                            disabled={filesUploading}
+                          />
+                        </div>
                         
                         {filesLoading ? (
                           <p className="text-sm text-muted-foreground text-center mt-4">Dateien werden geladen...</p>
@@ -1675,24 +1719,48 @@ export const ProjectDetailPage = () => {
                     <div>
                       <Label>Dateien (Output)</Label>
                       <div className="border rounded-lg p-4">
-                        <input
-                          id="project-output-file-upload"
-                          ref={outputFileInputRef}
-                          type="file"
-                          multiple
-                          className="sr-only"
-                          onChange={handleOutputFileUpload}
-                        />
-
-                        <Button asChild variant="outline" className="w-full" type="button">
-                          <label
-                            htmlFor="project-output-file-upload"
-                            onClick={() => debugLog("output:buttonClick", { disabled: filesUploading })}
-                          >
-                            <Upload className="h-4 w-4 mr-2" />
-                            Dateien hochladen (Output)
-                          </label>
-                        </Button>
+                        <div
+                          className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
+                            isDraggingOutputFiles
+                              ? "border-primary bg-primary/5"
+                              : "border-muted-foreground/25 hover:border-primary/50"
+                          }`}
+                          onDragEnter={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDraggingOutputFiles(true);
+                            debugLog("output:dragEnter");
+                          }}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!isDraggingOutputFiles) setIsDraggingOutputFiles(true);
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setIsDraggingOutputFiles(false);
+                            debugLog("output:dragLeave");
+                          }}
+                          onDrop={handleOutputDrop}
+                        >
+                          <div className="flex flex-col items-center justify-center gap-2 text-center">
+                            <Upload className={`h-8 w-8 transition-colors ${isDraggingOutputFiles ? "text-primary" : "text-muted-foreground"}`} />
+                            <Label htmlFor="project-output-file-upload" className="cursor-pointer text-primary hover:underline">
+                              Dateien auswählen
+                            </Label>
+                            <p className="text-xs text-muted-foreground">oder Dateien hierher ziehen</p>
+                          </div>
+                          <Input
+                            id="project-output-file-upload"
+                            ref={outputFileInputRef}
+                            type="file"
+                            multiple
+                            onChange={handleOutputFileUpload}
+                            className="hidden"
+                            disabled={filesUploading}
+                          />
+                        </div>
                         
                         {filesLoading ? (
                           <p className="text-sm text-muted-foreground text-center mt-4">Dateien werden geladen...</p>
