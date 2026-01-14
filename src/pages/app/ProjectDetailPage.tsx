@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { projectsApi, customersApi, invoicesApi, qcApi, filesApi } from "@/lib/apiClient";
 import type { ProjectUpdateRequest, ProjectFileInfo } from "@/lib/apiClient";
@@ -79,6 +79,23 @@ export const ProjectDetailPage = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { currentUser } = useAuth();
+
+  const debugEnabled = useMemo(() => {
+    try {
+      const search = new URLSearchParams(window.location.search);
+      return search.get("debug") === "1" || localStorage.getItem("debug_project_upload") === "1";
+    } catch {
+      return false;
+    }
+  }, []);
+  const [debugLogs, setDebugLogs] = useState<Array<{ ts: string; message: string; data?: unknown }>>([]);
+  const debugLog = (message: string, data?: unknown) => {
+    if (!debugEnabled) return;
+    const entry = { ts: new Date().toISOString(), message, data };
+    // eslint-disable-next-line no-console
+    console.log("[ProjectUpload]", entry.message, entry.data ?? "");
+    setDebugLogs((prev) => [entry, ...prev].slice(0, 200));
+  };
   
   const [project, setProject] = useState<Project | null>(null);
   const [customer, setCustomer] = useState<Customer | null>(null);
@@ -1050,10 +1067,13 @@ export const ProjectDetailPage = () => {
     if (!id) return;
     try {
       setFilesLoading(true);
+      debugLog("files:refresh:start");
       const files = await filesApi.listProjectFiles(id);
       setProjectFiles(files || []);
+      debugLog("files:refresh:success", { count: (files || []).length });
     } catch (error) {
       console.error("Failed to refresh project files:", error);
+      debugLog("files:refresh:error", error);
     } finally {
       setFilesLoading(false);
     }
@@ -1066,12 +1086,21 @@ export const ProjectDetailPage = () => {
 
     try {
       setFilesUploading(true);
+      debugLog("files:upload:start", {
+        source,
+        count: selectedFiles.length,
+        files: selectedFiles.map((f) => ({ name: f.name, size: f.size, type: f.type })),
+      });
       for (const file of selectedFiles) {
+        debugLog("files:upload:file:start", { source, name: file.name, size: file.size, type: file.type });
         await filesApi.uploadProjectFile(id, file, source);
+        debugLog("files:upload:file:success", { source, name: file.name });
       }
       toast.success(`${selectedFiles.length} Datei(en) hochgeladen`);
       await refreshProjectFiles();
+      debugLog("files:upload:done");
     } catch (error: unknown) {
+      debugLog("files:upload:error", error);
       toast.error(formatErrorMessage(error));
     } finally {
       setFilesUploading(false);
@@ -1081,23 +1110,29 @@ export const ProjectDetailPage = () => {
   const handleInputFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     e.target.value = "";
+    debugLog("input:onChange", { fileCount: files?.length || 0 });
     await uploadFiles(files, "input");
   };
 
   const openProjectFile = async (file: ProjectFileInfo) => {
     if (!id) return;
     try {
+      debugLog("files:open:start", { file_id: file.file_id, filename: file.filename, has_download_url: !!file.download_url });
       const url =
         file.download_url ||
         (await filesApi.getProjectFileUrl(id, file.file_id, 2)).download_url;
       window.open(url, "_blank", "noopener,noreferrer");
+      debugLog("files:open:success", { file_id: file.file_id });
     } catch (error: unknown) {
+      debugLog("files:open:fallbackBlob", { file_id: file.file_id, error });
       try {
         const blob = await filesApi.downloadProjectFile(id, file.file_id);
         const url = URL.createObjectURL(blob);
         window.open(url, "_blank", "noopener,noreferrer");
         setTimeout(() => URL.revokeObjectURL(url), 30_000);
+        debugLog("files:open:fallbackBlob:success", { file_id: file.file_id });
       } catch (fallbackError: unknown) {
+        debugLog("files:open:error", fallbackError);
         toast.error(formatErrorMessage(fallbackError));
       }
     }
@@ -1106,6 +1141,7 @@ export const ProjectDetailPage = () => {
   const downloadProjectFile = async (file: ProjectFileInfo) => {
     if (!id) return;
     try {
+      debugLog("files:download:start", { file_id: file.file_id, filename: file.filename });
       const blob = await filesApi.downloadProjectFile(id, file.file_id);
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -1115,7 +1151,9 @@ export const ProjectDetailPage = () => {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+      debugLog("files:download:success", { file_id: file.file_id });
     } catch (error: unknown) {
+      debugLog("files:download:error", error);
       toast.error(formatErrorMessage(error));
     }
   };
@@ -1125,10 +1163,13 @@ export const ProjectDetailPage = () => {
     if (!window.confirm(`Datei wirklich löschen?\n\n${file.filename}`)) return;
 
     try {
+      debugLog("files:delete:start", { file_id: file.file_id, filename: file.filename });
       await filesApi.deleteProjectFile(id, file.file_id);
       toast.success("Datei gelöscht");
       await refreshProjectFiles();
+      debugLog("files:delete:success", { file_id: file.file_id });
     } catch (error: unknown) {
+      debugLog("files:delete:error", error);
       toast.error(formatErrorMessage(error));
     }
   };
@@ -1136,6 +1177,7 @@ export const ProjectDetailPage = () => {
   const handleOutputFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     e.target.value = "";
+    debugLog("output:onChange", { fileCount: files?.length || 0 });
     await uploadFiles(files, "output");
   };
 
@@ -1189,6 +1231,58 @@ export const ProjectDetailPage = () => {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      {debugEnabled && (
+        <Card className="border-dashed">
+          <CardHeader className="py-3">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-sm">Debug: Projekt Upload</CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      const text = debugLogs
+                        .slice()
+                        .reverse()
+                        .map((l) => {
+                          const payload = l.data === undefined ? "" : ` ${JSON.stringify(l.data)}`;
+                          return `${l.ts} ${l.message}${payload}`;
+                        })
+                        .join("\n");
+                      await navigator.clipboard.writeText(text);
+                      toast.success("Debug-Logs kopiert");
+                    } catch (error) {
+                      toast.error("Kopieren fehlgeschlagen");
+                      debugLog("debug:copy:error", error);
+                    }
+                  }}
+                >
+                  Copy
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setDebugLogs([])}>
+                  Clear
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Aktiviert via `?debug=1` oder `localStorage.debug_project_upload=1`.
+            </p>
+            <pre className="text-xs bg-muted rounded p-2 max-h-64 overflow-auto whitespace-pre-wrap">
+              {debugLogs.length === 0
+                ? "Keine Logs (noch keine Aktion)."
+                : debugLogs
+                    .map((l) => {
+                      const payload = l.data === undefined ? "" : ` ${JSON.stringify(l.data)}`;
+                      return `${l.ts} ${l.message}${payload}`;
+                    })
+                    .join("\n")}
+            </pre>
+          </CardContent>
+        </Card>
+      )}
       {/* Header */}
       <div className="bg-muted border rounded-lg p-6">
         <div className="flex items-start justify-between">
@@ -1489,7 +1583,14 @@ export const ProjectDetailPage = () => {
                           className="w-full"
                           type="button"
                           disabled={filesUploading}
-                          onClick={() => inputFileInputRef.current?.click()}
+                          onClick={() => {
+                            const input = inputFileInputRef.current;
+                            debugLog("input:buttonClick", { hasRef: !!input, disabled: filesUploading });
+                            if (!input) return;
+                            const anyInput = input as unknown as { showPicker?: () => void };
+                            if (typeof anyInput.showPicker === "function") anyInput.showPicker();
+                            else input.click();
+                          }}
                         >
                           <Upload className="h-4 w-4 mr-2" />
                           Dateien hochladen (Input)
@@ -1586,7 +1687,14 @@ export const ProjectDetailPage = () => {
                           className="w-full"
                           type="button"
                           disabled={filesUploading}
-                          onClick={() => outputFileInputRef.current?.click()}
+                          onClick={() => {
+                            const input = outputFileInputRef.current;
+                            debugLog("output:buttonClick", { hasRef: !!input, disabled: filesUploading });
+                            if (!input) return;
+                            const anyInput = input as unknown as { showPicker?: () => void };
+                            if (typeof anyInput.showPicker === "function") anyInput.showPicker();
+                            else input.click();
+                          }}
                         >
                           <Upload className="h-4 w-4 mr-2" />
                           Dateien hochladen (Output)
