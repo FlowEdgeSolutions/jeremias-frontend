@@ -1644,7 +1644,11 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                         </TableHeader>
                         <TableBody>
                           {projects.map((project) => (
-                            <TableRow key={project.id}>
+                            <TableRow
+                              key={project.id}
+                              className="cursor-pointer hover:bg-muted/50"
+                              onClick={() => navigate(`/app/projects/${project.id}`)}
+                            >
                               <TableCell className="font-medium">
                                 {project.product_name}
                               </TableCell>

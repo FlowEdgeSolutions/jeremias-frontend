@@ -100,7 +100,17 @@ export const CustomersPage = () => {
     { id: "BESTANDSKUNDE", title: "Bestandskunde", items: filteredCustomers.filter(c => c.stage === "BESTANDSKUNDE") },
   ];
 
-  const renderKanbanCard = (customer: Customer) => (
+  const formatInvoiceDate = (value?: string) => {
+    if (!value) return "-";
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return parsed.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+
+  const renderKanbanCard = (customer: Customer) => {
+    const lastInvoiceDate = formatInvoiceDate(customer.last_invoice_at);
+
+    return (
     <Card 
       className="hover:shadow-md transition-shadow cursor-pointer"
       onClick={() => navigate(`/app/customers/${customer.id}`)}
@@ -126,6 +136,9 @@ export const CustomersPage = () => {
             <div className="flex items-center justify-between pt-2">
               <span>{customer.order_count || 0} Bestellungen</span>
               <span className="font-medium text-foreground">{(customer.total_revenue || 0).toLocaleString("de-DE")} €</span>
+            </div>
+            <div className="text-xs text-sky-700">
+              Letzte Rechnung: {lastInvoiceDate}
             </div>
           </div>
         </div>
@@ -167,7 +180,8 @@ export const CustomersPage = () => {
         </div>
       </CardContent>
     </Card>
-  );
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -274,7 +288,12 @@ export const CustomersPage = () => {
                         );
                       })()}
                     </TableCell>
-                    <TableCell className="text-right">{customer.order_count || 0}</TableCell>
+                    <TableCell className="text-right">
+                      <div className="text-sm">{customer.order_count || 0}</div>
+                      <div className="text-xs text-sky-700">
+                        {formatInvoiceDate(customer.last_invoice_at)}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right font-medium whitespace-nowrap">
                       {(customer.total_revenue || 0).toLocaleString("de-DE")} €
                     </TableCell>

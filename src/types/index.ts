@@ -45,6 +45,7 @@ export interface Customer {
   segment: Segment;
   stage: PipelineStage;
   order_count: number;
+  last_invoice_at?: string;
   total_revenue: number;
   created_at: string;
   updated_at: string;
