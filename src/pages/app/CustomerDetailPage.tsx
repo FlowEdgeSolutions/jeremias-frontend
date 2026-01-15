@@ -99,6 +99,7 @@ interface Signature {
   id: string;
   name: string;
   content: string;
+  attachments?: EmailAttachment[];
   isDefault?: boolean;
 }
 
@@ -153,7 +154,11 @@ export const CustomerDetailPage = () => {
   const [signatures, setSignatures] = useState<Signature[]>([]);
   const [selectedSignatureId, setSelectedSignatureId] = useState<string>("");
   const [showSignatureDialog, setShowSignatureDialog] = useState(false);
-  const [newSignature, setNewSignature] = useState({ name: "", content: "" });
+  const [newSignature, setNewSignature] = useState({
+    name: "",
+    content: "",
+    attachments: [] as EmailAttachment[],
+  });
   const [composeForm, setComposeForm] = useState({
     to: "",
     subject: "",
@@ -162,6 +167,7 @@ export const CustomerDetailPage = () => {
   });
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const signatureAttachmentInputRef = useRef<HTMLInputElement>(null);
   const sharedMailboxEmail = "vaillant@team-noah.de";
 
   const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
@@ -380,7 +386,14 @@ export const CustomerDetailPage = () => {
   const loadSignatures = () => {
     const saved = localStorage.getItem("email_signatures");
     if (saved) {
-      setSignatures(JSON.parse(saved));
+      const parsed = JSON.parse(saved);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map((sig) => ({
+            ...sig,
+            attachments: Array.isArray(sig.attachments) ? sig.attachments : [],
+          }))
+        : [];
+      setSignatures(normalized);
     }
   };
 
@@ -422,6 +435,70 @@ export const CustomerDetailPage = () => {
     }
   };
 
+  const buildSignatureAttachments = (signature?: Signature | null): EmailAttachment[] => {
+    if (!signature?.attachments?.length) return [];
+    return signature.attachments.map(att => ({
+      ...att,
+      id: crypto.randomUUID(),
+    }));
+  };
+
+  const addSignatureAttachments = (signature?: Signature | null) => {
+    if (!signature?.attachments?.length) return;
+    setAttachments(prev => {
+      const existingKeys = new Set(
+        prev.map(att => `${att.filename}|${att.size}|${att.content_type}|${att.data}`)
+      );
+      const additions = signature.attachments
+        .filter(att => !existingKeys.has(`${att.filename}|${att.size}|${att.content_type}|${att.data}`))
+        .map(att => ({
+          ...att,
+          id: crypto.randomUUID(),
+        }));
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
+  };
+
+  const handleSignatureAttachmentSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+
+    Array.from(files).forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`Datei "${file.name}" ist zu groß (max. 10 MB)`);
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = (reader.result as string).split(',')[1];
+        setNewSignature(prev => ({
+          ...prev,
+          attachments: [
+            ...prev.attachments,
+            {
+              id: crypto.randomUUID(),
+              filename: file.name,
+              data: base64,
+              content_type: file.type || 'application/octet-stream',
+              size: file.size,
+            },
+          ],
+        }));
+      };
+      reader.readAsDataURL(file);
+    });
+
+    e.target.value = '';
+  };
+
+  const removeSignatureAttachment = (id: string) => {
+    setNewSignature(prev => ({
+      ...prev,
+      attachments: prev.attachments.filter(att => att.id !== id),
+    }));
+  };
+
   const saveSignature = () => {
     if (!newSignature.name.trim() || !newSignature.content.trim()) {
       toast.error("Bitte Name und Signatur ausfüllen");
@@ -432,6 +509,7 @@ export const CustomerDetailPage = () => {
       id: Date.now().toString(),
       name: newSignature.name,
       content: newSignature.content,
+      attachments: newSignature.attachments,
       isDefault: signatures.length === 0,
     };
 
@@ -439,7 +517,7 @@ export const CustomerDetailPage = () => {
     setSignatures(updated);
     localStorage.setItem("email_signatures", JSON.stringify(updated));
     
-    setNewSignature({ name: "", content: "" });
+    setNewSignature({ name: "", content: "", attachments: [] });
     setShowSignatureDialog(false);
     toast.success("Signatur gespeichert!");
   };
@@ -532,6 +610,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
       if (defaultSig) {
         setSelectedSignatureId(defaultSig.id);
       }
+      setAttachments(buildSignatureAttachments(defaultSig));
       setShowReplyBox(true);
     }
   };
@@ -548,6 +627,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
     if (defaultSig) {
       setSelectedSignatureId(defaultSig.id);
     }
+    setAttachments(buildSignatureAttachments(defaultSig));
     setExpandedEmailId(null);
     setShowReplyBox(false);
     setShowComposeBox(true);
@@ -562,6 +642,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         ...composeForm,
         body: composeForm.body + "\n\n" + signature.content,
       });
+      addSignatureAttachments(signature);
     }
   };
 
@@ -1277,14 +1358,24 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {Object.entries(PRODUCT_LABELS).map(([code, label]) => (
-                  <div key={code} className="flex items-center justify-between py-2 border-b last:border-0">
-                    <span className="text-sm">{label}</span>
-                    <Badge variant="secondary" className="ml-2">
-                      {details.product_interests[code as keyof typeof details.product_interests] || 0}
-                    </Badge>
-                  </div>
-                ))}
+                {(Array.isArray(details.product_interests) && details.product_interests.length > 0
+                  ? details.product_interests
+                  : Object.entries(PRODUCT_LABELS).map(([code, label]) => ({
+                      product_code: code,
+                      product_name: label,
+                      count: 0,
+                    }))
+                ).map((item) => {
+                  const label = item.product_name || PRODUCT_LABELS[item.product_code] || item.product_code;
+                  return (
+                    <div key={item.product_code} className="flex items-center justify-between py-2 border-b last:border-0">
+                      <span className="text-sm">{label}</span>
+                      <Badge variant="secondary" className="ml-2">
+                        {item.count || 0}
+                      </Badge>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -2182,6 +2273,55 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                     placeholder="Mit freundlichen Grüßen,&#10;Max Mustermann&#10;Telefon: +49 123 456789"
                   />
                 </div>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label>Dokumente (als Anhang)</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => signatureAttachmentInputRef.current?.click()}
+                      className="gap-2"
+                    >
+                      <Paperclip className="w-4 h-4" />
+                      Datei hinzufügen
+                    </Button>
+                    <input
+                      ref={signatureAttachmentInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={handleSignatureAttachmentSelect}
+                    />
+                  </div>
+                  {newSignature.attachments.length > 0 && (
+                    <div className="space-y-2 p-3 bg-background rounded-lg border">
+                      {newSignature.attachments.map((attachment) => (
+                        <div key={attachment.id} className="flex items-center justify-between p-2 rounded border bg-muted/40">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Paperclip className="w-3 h-3 flex-shrink-0 text-muted-foreground" />
+                            <span className="text-xs truncate">{attachment.filename}</span>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">
+                              ({formatFileSize(attachment.size)})
+                            </span>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeSignatureAttachment(attachment.id)}
+                            className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                          >
+                            <X className="w-3 h-3" />
+                          </Button>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-muted-foreground">
+                        {newSignature.attachments.length} Datei(en) · {formatFileSize(newSignature.attachments.reduce((sum, a) => sum + a.size, 0))}
+                      </p>
+                    </div>
+                  )}
+                </div>
                 <Button onClick={saveSignature} className="w-full bg-emerald-500 hover:bg-emerald-600">
                   <Plus className="h-4 w-4 mr-2" />
                   Signatur speichern
@@ -2223,6 +2363,12 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
                         className="text-sm text-muted-foreground prose prose-sm max-w-none"
                         dangerouslySetInnerHTML={{ __html: sig.content }}
                       />
+                      {sig.attachments && sig.attachments.length > 0 && (
+                        <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                          <Paperclip className="h-3 w-3" />
+                          <span>{sig.attachments.length} Anhang/Anhänge</span>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>

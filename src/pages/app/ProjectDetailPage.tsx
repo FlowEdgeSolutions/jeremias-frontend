@@ -54,6 +54,7 @@ interface Signature {
   id: string;
   name: string;
   content: string;
+  attachments?: EmailAttachment[];
   isDefault: boolean;
 }
 
@@ -244,7 +245,14 @@ export const ProjectDetailPage = () => {
     // Load signatures from localStorage
     const savedSignatures = localStorage.getItem("email_signatures");
     if (savedSignatures) {
-      setSignatures(JSON.parse(savedSignatures));
+      const parsed = JSON.parse(savedSignatures);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map((sig) => ({
+            ...sig,
+            attachments: Array.isArray(sig.attachments) ? sig.attachments : [],
+          }))
+        : [];
+      setSignatures(normalized);
     }
   }, [id, isAdmin]);
 
@@ -529,6 +537,30 @@ export const ProjectDetailPage = () => {
       toast.error("Fehler beim Herunterladen des Anhangs");
     }
   };
+
+  const buildSignatureAttachments = (signature?: Signature | null): EmailAttachment[] => {
+    if (!signature?.attachments?.length) return [];
+    return signature.attachments.map(att => ({
+      ...att,
+      id: crypto.randomUUID(),
+    }));
+  };
+
+  const addSignatureAttachments = (signature?: Signature | null) => {
+    if (!signature?.attachments?.length) return;
+    setAttachments(prev => {
+      const existingKeys = new Set(
+        prev.map(att => `${att.filename}|${att.size}|${att.content_type}|${att.data}`)
+      );
+      const additions = signature.attachments
+        .filter(att => !existingKeys.has(`${att.filename}|${att.size}|${att.content_type}|${att.data}`))
+        .map(att => ({
+          ...att,
+          id: crypto.randomUUID(),
+        }));
+      return additions.length > 0 ? [...prev, ...additions] : prev;
+    });
+  };
   
   const replyToEmail = () => {
     if (!selectedEmail) return;
@@ -544,7 +576,7 @@ export const ProjectDetailPage = () => {
       body: defaultSig ? `\n\n${defaultSig.content}${quotedSection}` : quotedSection,
       accountId: mailboxAccount?.id || "",
     });
-    setAttachments([]);
+    setAttachments(buildSignatureAttachments(defaultSig));
     setShowReplyBox(true);
   };
 
@@ -610,7 +642,7 @@ export const ProjectDetailPage = () => {
     if (defaultSig) {
       setSelectedSignatureId(defaultSig.id);
     }
-    setAttachments([]);
+    setAttachments(buildSignatureAttachments(defaultSig));
     setExpandedEmailId(null);
     setShowReplyBox(false);
     setShowComposeBox(true);
@@ -692,6 +724,7 @@ export const ProjectDetailPage = () => {
         ...composeForm,
         body: composeForm.body + "\n\n" + signature.content,
       });
+      addSignatureAttachments(signature);
     }
   };
 

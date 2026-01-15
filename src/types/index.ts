@@ -206,14 +206,10 @@ export interface CustomerDetails {
     order_count: number;
   };
   product_interests: {
-    "3D_MODELLIERUNG_HUELLE": number;
-    "3D_MODELLIERUNG_RAEUME": number;
-    "LCA_QNG": number;
-    "ISFP_ERSTELLUNG": number;
-    "WAERMEBRUECKEN": number;
-    "HEIZLAST": number;
-    "HEIZLAST_HYDRAULISCH": number;
-  };
+    product_code: string;
+    product_name: string;
+    count: number;
+  }[];
   projects_count: number;
   invoices_count: number;
 }

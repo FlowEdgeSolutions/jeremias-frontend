@@ -109,6 +109,14 @@ interface EmailAttachment {
   size: number;
 }
 
+interface Signature {
+  id: string;
+  name: string;
+  content: string;
+  isDefault: boolean;
+  attachments?: EmailAttachment[];
+}
+
 // ============= Component =============
 
 export const EmailsPage = () => {
@@ -129,7 +137,7 @@ export const EmailsPage = () => {
   const [creatingProject, setCreatingProject] = useState(false);
   const [showReplyDialog, setShowReplyDialog] = useState(false);
   const [replyForm, setReplyForm] = useState({ body: "" });
-  const [signatures, setSignatures] = useState<Array<{ id: string; name: string; content: string; isDefault: boolean }>>([]);
+  const [signatures, setSignatures] = useState<Signature[]>([]);
   const [allAccounts, setAllAccounts] = useState<EmailAccountLocal[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
   const [selectedAccountType, setSelectedAccountType] = useState<"gmail" | "microsoft" | "all" | null>(null);
@@ -186,7 +194,14 @@ export const EmailsPage = () => {
     // Load signatures from localStorage
     const savedSignatures = localStorage.getItem("email_signatures");
     if (savedSignatures) {
-      setSignatures(JSON.parse(savedSignatures));
+      const parsed = JSON.parse(savedSignatures);
+      const normalized = Array.isArray(parsed)
+        ? parsed.map((sig) => ({
+            ...sig,
+            attachments: Array.isArray(sig.attachments) ? sig.attachments : [],
+          }))
+        : [];
+      setSignatures(normalized);
     }
   }, []);
   
@@ -685,6 +700,14 @@ export const EmailsPage = () => {
     return signatures.find(s => s.isDefault);
   };
 
+  const buildSignatureAttachments = (signature?: Signature | null): EmailAttachment[] => {
+    if (!signature?.attachments?.length) return [];
+    return signature.attachments.map(att => ({
+      ...att,
+      id: crypto.randomUUID(),
+    }));
+  };
+
   const openComposeDialog = () => {
     const defaultSig = getDefaultSignature();
     const mailboxAccount = getSharedMailboxAccount(allAccounts);
@@ -698,7 +721,7 @@ export const EmailsPage = () => {
       body: defaultSig ? `\n\n${defaultSig.content}` : "",
       accountId: mailboxAccount.id,
     });
-    setAttachments([]);
+    setAttachments(buildSignatureAttachments(defaultSig));
     setShowComposeDialog(true);
   };
 
