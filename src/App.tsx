@@ -22,7 +22,6 @@ import { EmailsPage } from "@/pages/app/EmailsPage";
 import { EmailCallbackPage } from "@/pages/app/EmailCallbackPage";
 import { ProfilePage } from "@/pages/app/ProfilePage";
 import { UserManagementPage } from "@/pages/app/UserManagementPage";
-import { SettingsPage } from "@/pages/app/SettingsPage";
 
 import { PortalLoginPage } from "@/pages/portal/PortalLoginPage";
 
@@ -67,7 +66,6 @@ const App = () => (
               <Route path="emails/callback" element={<AdminRoute><EmailCallbackPage /></AdminRoute>} />
               <Route path="users" element={<AdminRoute><UserManagementPage /></AdminRoute>} />
               <Route path="profile" element={<AdminOrProjectManagerRoute><ProfilePage /></AdminOrProjectManagerRoute>} />
-              <Route path="settings" element={<AdminRoute><SettingsPage /></AdminRoute>} />
             </Route>
 
             {/* Login */}
