@@ -81,6 +81,8 @@ export interface Project {
   payload?: Record<string, unknown>;
   order_confirmation_sent?: boolean;
   order_confirmation_sent_at?: string;
+  invoices_count?: number;
+  last_invoice_at?: string;
   created_at: string;
   updated_at: string;
   // Legacy frontend fields for compatibility

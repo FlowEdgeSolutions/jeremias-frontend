@@ -121,6 +121,13 @@ export const ProjectsPage = () => {
     return `Noch ${days} Tage`;
   };
 
+  const formatInvoiceDate = (date?: string) => {
+    if (!date) return "-";
+    const parsed = new Date(date);
+    if (Number.isNaN(parsed.getTime())) return "-";
+    return parsed.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+  };
+
   const kanbanColumns = [
     { id: "NEU", title: "Neu", items: filteredProjects.filter(p => p.status === "NEU") },
     { id: "IN_BEARBEITUNG", title: "In Bearbeitung", items: filteredProjects.filter(p => p.status === "IN_BEARBEITUNG") },
@@ -131,6 +138,8 @@ export const ProjectsPage = () => {
 
   const renderProjectCard = (project: Project) => {
     const assignedUsers = users.filter(u => project.assigned_user_ids?.includes(u.id));
+    const invoicesCount = project.invoices_count ?? 0;
+    const lastInvoiceDate = formatInvoiceDate(project.last_invoice_at);
     
     return (
       <Card 
@@ -166,7 +175,13 @@ export const ProjectsPage = () => {
                 <p className="text-xs font-medium text-primary mt-1">
                   {project.credits} Credits
                 </p>
-              )}
+              )}
+              <p className="text-xs text-muted-foreground mt-1">
+                Bestellungen: {invoicesCount}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Letzte Rechnung: {lastInvoiceDate}
+              </p>
               {project.deadline && (
                 <p className={`text-xs font-bold mt-1 ${getRemainingDaysColor(project.deadline)}`}>
                   ⏰ {getRemainingDaysText(project.deadline)}
