@@ -222,6 +222,16 @@ export const ProjectDetailPage = () => {
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const projectMailboxEmail = "projekte@team-noah.de";
+
+  const getPreferredComposeAccount = (accounts: EmailAccount[]) => {
+    const preferred = accounts.find(account => (account.email || "").toLowerCase() === projectMailboxEmail);
+    if (preferred) return preferred;
+
+    const microsoftAccounts = accounts.filter(account => account.provider === "microsoft");
+    const primaryMicrosoft = microsoftAccounts.find(account => account.is_primary) || microsoftAccounts[0];
+    return primaryMicrosoft || accounts.find(account => account.is_primary) || accounts[0];
+  };
 
   const formatErrorMessage = (error: unknown) => {
     const err = error as { status?: number; message?: string };
@@ -270,13 +280,9 @@ export const ProjectDetailPage = () => {
       
       setEmailAccounts(accounts);
       
-      // Set default account - prioritize Microsoft
-      const microsoftAccounts = accounts.filter((a: EmailAccount) => a.provider === "microsoft");
-      const primaryMicrosoft = microsoftAccounts.find((a: EmailAccount) => a.is_primary) || microsoftAccounts[0];
-      const primaryAccount = primaryMicrosoft || accounts.find((a: EmailAccount) => a.is_primary) || accounts[0];
-      
-      if (primaryAccount) {
-        setComposeForm(prev => ({ ...prev, accountId: primaryAccount.id }));
+      const preferredAccount = getPreferredComposeAccount(accounts);
+      if (preferredAccount) {
+        setComposeForm(prev => ({ ...prev, accountId: preferredAccount.id }));
       }
     } catch (error) {
       console.error("Error loading email accounts:", error);
@@ -588,16 +594,13 @@ export const ProjectDetailPage = () => {
     const defaultSig = signatures.find(s => s.isDefault);
     const projectRef = projectNumber ? `[Projekt ${projectNumber}] ` : "";
     
-    // Prioritize Microsoft accounts
-    const microsoftAccounts = emailAccounts.filter(a => a.provider === "microsoft");
-    const primaryMicrosoft = microsoftAccounts.find(a => a.is_primary) || microsoftAccounts[0];
-    const primaryAccount = primaryMicrosoft || emailAccounts.find(a => a.is_primary) || emailAccounts[0];
+    const preferredAccount = getPreferredComposeAccount(emailAccounts);
     
     setComposeForm({
       to: customer.email || "",
       subject: `${projectRef}${project?.product_name || ""}`,
       body: defaultSig ? `\n\n${defaultSig.content}` : "",
-      accountId: primaryAccount?.id || "",
+      accountId: preferredAccount?.id || "",
     });
     if (defaultSig) {
       setSelectedSignatureId(defaultSig.id);
