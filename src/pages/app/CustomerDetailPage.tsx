@@ -162,6 +162,12 @@ export const CustomerDetailPage = () => {
   });
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const sharedMailboxEmail = "vaillant@team-noah.de";
+
+  const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
+
+  const getSharedMailboxAccount = (accounts: EmailAccount[]) =>
+    accounts.find(account => normalizeEmail(account.email) === sharedMailboxEmail);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [showComposeBox, setShowComposeBox] = useState(false);
   const [emailAccounts, setEmailAccounts] = useState<Array<{ id: string; email: string; provider: string; is_primary: boolean }>>([]);
@@ -401,16 +407,16 @@ export const CustomerDetailPage = () => {
           is_primary: acc.is_primary,
         }));
       
-      setEmailAccounts(accounts);
-      
-      // Set default account - PRIORITIZE Microsoft accounts
-      const microsoftAccounts = accounts.filter((a: { provider: string }) => a.provider === "microsoft");
-      const primaryMicrosoft = microsoftAccounts.find((a: { is_primary: boolean }) => a.is_primary) || microsoftAccounts[0];
-      const primaryAccount = primaryMicrosoft || accounts.find((a: { is_primary: boolean }) => a.is_primary) || accounts[0];
-      
-      if (primaryAccount) {
-        setComposeForm(prev => ({ ...prev, accountId: primaryAccount.id }));
+      const mailboxAccount = getSharedMailboxAccount(accounts);
+      if (!mailboxAccount) {
+        setEmailAccounts([]);
+        setComposeForm(prev => ({ ...prev, accountId: "" }));
+        toast.error(`Kein aktives Konto für ${sharedMailboxEmail} gefunden.`);
+        return;
       }
+
+      setEmailAccounts([mailboxAccount]);
+      setComposeForm(prev => ({ ...prev, accountId: mailboxAccount.id }));
     } catch (error) {
       console.error("Error loading email accounts:", error);
     }
@@ -646,10 +652,12 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         return;
       }
 
-      // Determine which endpoint to use based on selected account
-      const selectedAccount = emailAccounts.find(a => a.id === composeForm.accountId);
-      const provider = selectedAccount?.provider || "microsoft";
-      const endpoint = provider === "gmail" ? "gmail/send" : "microsoft-mail/send";
+      const mailboxAccount = getSharedMailboxAccount(emailAccounts);
+      if (!mailboxAccount) {
+        toast.error(`Kein aktives Konto für ${sharedMailboxEmail} gefunden.`);
+        return;
+      }
+      const endpoint = "microsoft-mail/send";
 
       const response = await fetch(`${API_CONFIG.BASE_URL}/${endpoint}`, {
         method: "POST",
@@ -661,7 +669,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
           to: composeForm.to,
           subject: composeForm.subject,
           body: composeForm.body,
-          account_id: composeForm.accountId || undefined,
+          account_id: mailboxAccount.id,
           attachments: attachments.length > 0 ? attachments.map(a => ({
             filename: a.filename,
             data: a.data,
@@ -676,7 +684,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         throw new Error(errorMessage);
       }
 
-      const sentFrom = selectedAccount?.email || "unbekannt";
+      const sentFrom = mailboxAccount.email || "unbekannt";
       const attachmentText = attachments.length > 0 ? ` mit ${attachments.length} Anhang/Anhängen` : "";
       toast.success(`E-Mail erfolgreich gesendet von ${sentFrom}${attachmentText}!`);
       setShowReplyBox(false);
@@ -686,7 +694,7 @@ Am ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEma
         to: "",
         subject: "",
         body: "",
-        accountId: composeForm.accountId, // Keep selected account
+        accountId: mailboxAccount.id,
       });
       loadCustomerEmails();
     } catch (error) {

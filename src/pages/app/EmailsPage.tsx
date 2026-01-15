@@ -137,6 +137,12 @@ export const EmailsPage = () => {
   const [composeForm, setComposeForm] = useState({ to: "", subject: "", body: "", accountId: "" });
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
+  const sharedMailboxEmail = "vaillant@team-noah.de";
+
+  const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
+
+  const getSharedMailboxAccount = (accounts: EmailAccountLocal[]) =>
+    accounts.find(account => normalizeEmail(account.email) === sharedMailboxEmail);
   const [createForm, setCreateForm] = useState({
     email: "",
     firstName: "",
@@ -255,6 +261,14 @@ export const EmailsPage = () => {
         
         // Load emails with the determined account (don't rely on state which is async)
         loadEmails(accountToUse.id, accountToUse.type || "gmail", "INBOX");
+      }
+
+      const mailboxAccount = getSharedMailboxAccount(activeAccounts);
+      if (mailboxAccount) {
+        setComposeForm(prev => ({ ...prev, accountId: mailboxAccount.id }));
+      } else {
+        setComposeForm(prev => ({ ...prev, accountId: "" }));
+        toast.error(`Kein aktives Konto für ${sharedMailboxEmail} gefunden.`);
       }
     } catch (error) {
       console.error("Error checking connection:", error);
@@ -481,7 +495,13 @@ export const EmailsPage = () => {
       return;
     }
     try {
-      const response = await fetch(`${API_CONFIG.BASE_URL}/gmail/send`, {
+      const mailboxAccount = getSharedMailboxAccount(allAccounts);
+      if (!mailboxAccount) {
+        toast.error(`Kein aktives Konto für ${sharedMailboxEmail} gefunden.`);
+        return;
+      }
+
+      const response = await fetch(`${API_CONFIG.BASE_URL}/microsoft-mail/send`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -491,7 +511,7 @@ export const EmailsPage = () => {
           to: composeForm.to,
           subject: composeForm.subject,
           body: composeForm.body,
-          account_id: composeForm.accountId || selectedAccountId,
+          account_id: mailboxAccount.id,
           attachments: attachments.length > 0 ? attachments.map(a => ({
             filename: a.filename,
             data: a.data,
@@ -509,7 +529,7 @@ export const EmailsPage = () => {
       const attachmentText = attachments.length > 0 ? ` mit ${attachments.length} Anhang/Anhängen` : "";
       toast.success(`E-Mail gesendet${attachmentText}`);
       setShowComposeDialog(false);
-      setComposeForm({ to: "", subject: "", body: "", accountId: "" });
+      setComposeForm({ to: "", subject: "", body: "", accountId: mailboxAccount.id });
       setAttachments([]);
       loadEmails();
     } catch (error) {
@@ -517,6 +537,10 @@ export const EmailsPage = () => {
       toast.error(message);
     }
   };
+
+  const sendAccounts = allAccounts.filter(
+    account => normalizeEmail(account.email) === sharedMailboxEmail
+  );
 
   const handleCreateLead = async () => {
     if (!createForm.email || !createForm.firstName || !createForm.lastName) {
@@ -663,16 +687,16 @@ export const EmailsPage = () => {
 
   const openComposeDialog = () => {
     const defaultSig = getDefaultSignature();
-    // Prioritize Microsoft accounts
-    const microsoftAccounts = allAccounts.filter(acc => acc.type === "microsoft");
-    const primaryMicrosoft = microsoftAccounts.find(acc => acc.is_primary) || microsoftAccounts[0];
-    const primaryAccount = allAccounts.find(acc => acc.is_primary);
-    const accountToUse = primaryMicrosoft || primaryAccount || allAccounts[0];
+    const mailboxAccount = getSharedMailboxAccount(allAccounts);
+    if (!mailboxAccount) {
+      toast.error(`Kein aktives Konto für ${sharedMailboxEmail} gefunden.`);
+      return;
+    }
     setComposeForm({
       to: "",
       subject: "",
       body: defaultSig ? `\n\n${defaultSig.content}` : "",
-      accountId: accountToUse?.id || "",
+      accountId: mailboxAccount.id,
     });
     setAttachments([]);
     setShowComposeDialog(true);
@@ -1327,7 +1351,7 @@ export const EmailsPage = () => {
           </DialogHeader>
           <div className="space-y-4 pt-4">
             {/* Absender-Auswahl */}
-            {allAccounts.length > 0 && (
+            {sendAccounts.length > 0 && (
               <div className="space-y-2">
                 <Label>Von (Absender)</Label>
                 <Select 
@@ -1338,7 +1362,7 @@ export const EmailsPage = () => {
                     <SelectValue placeholder="Absender wählen" />
                   </SelectTrigger>
                   <SelectContent>
-                    {allAccounts.map((acc) => (
+                    {sendAccounts.map((acc) => (
                       <SelectItem key={acc.id} value={acc.id}>
                         <span className="flex items-center gap-2">
                           <EnvelopeIcon className="h-4 w-4" />
