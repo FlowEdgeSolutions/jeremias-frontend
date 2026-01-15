@@ -224,14 +224,10 @@ export const ProjectDetailPage = () => {
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const projectMailboxEmail = "projekte@team-noah.de";
 
-  const getPreferredComposeAccount = (accounts: EmailAccount[]) => {
-    const preferred = accounts.find(account => (account.email || "").toLowerCase() === projectMailboxEmail);
-    if (preferred) return preferred;
+  const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
 
-    const microsoftAccounts = accounts.filter(account => account.provider === "microsoft");
-    const primaryMicrosoft = microsoftAccounts.find(account => account.is_primary) || microsoftAccounts[0];
-    return primaryMicrosoft || accounts.find(account => account.is_primary) || accounts[0];
-  };
+  const getProjectMailboxAccount = (accounts: EmailAccount[]) =>
+    accounts.find(account => normalizeEmail(account.email) === projectMailboxEmail);
 
   const formatErrorMessage = (error: unknown) => {
     const err = error as { status?: number; message?: string };
@@ -277,13 +273,17 @@ export const ProjectDetailPage = () => {
           provider: acc.provider,
           is_primary: acc.is_primary,
         }));
-      
-      setEmailAccounts(accounts);
-      
-      const preferredAccount = getPreferredComposeAccount(accounts);
-      if (preferredAccount) {
-        setComposeForm(prev => ({ ...prev, accountId: preferredAccount.id }));
+
+      const mailboxAccount = getProjectMailboxAccount(accounts);
+      if (!mailboxAccount) {
+        setEmailAccounts([]);
+        setComposeForm(prev => ({ ...prev, accountId: "" }));
+        toast.error(`Kein aktives Konto für ${projectMailboxEmail} gefunden.`);
+        return;
       }
+
+      setEmailAccounts([mailboxAccount]);
+      setComposeForm(prev => ({ ...prev, accountId: mailboxAccount.id }));
     } catch (error) {
       console.error("Error loading email accounts:", error);
     }
@@ -534,6 +534,7 @@ export const ProjectDetailPage = () => {
     if (!selectedEmail) return;
     
     const defaultSig = signatures.find(s => s.isDefault);
+    const mailboxAccount = getProjectMailboxAccount(emailAccounts);
     const quotedText = selectedEmail.body_text?.split("\n").join("\n> ") || "";
     const quotedSection = `\n\n---\nAm ${new Date(selectedEmail.date).toLocaleString("de-DE")} schrieb ${selectedEmail.from_name}:\n> ${quotedText}`;
     
@@ -541,7 +542,7 @@ export const ProjectDetailPage = () => {
       to: selectedEmail.from,
       subject: `Re: ${selectedEmail.subject}`,
       body: defaultSig ? `\n\n${defaultSig.content}${quotedSection}` : quotedSection,
-      accountId: composeForm.accountId,
+      accountId: mailboxAccount?.id || "",
     });
     setAttachments([]);
     setShowReplyBox(true);
@@ -594,13 +595,17 @@ export const ProjectDetailPage = () => {
     const defaultSig = signatures.find(s => s.isDefault);
     const projectRef = projectNumber ? `[Projekt ${projectNumber}] ` : "";
     
-    const preferredAccount = getPreferredComposeAccount(emailAccounts);
+    const mailboxAccount = getProjectMailboxAccount(emailAccounts);
+    if (!mailboxAccount) {
+      toast.error(`Kein aktives Konto für ${projectMailboxEmail} gefunden.`);
+      return;
+    }
     
     setComposeForm({
       to: customer.email || "",
       subject: `${projectRef}${project?.product_name || ""}`,
       body: defaultSig ? `\n\n${defaultSig.content}` : "",
-      accountId: preferredAccount?.id || "",
+      accountId: mailboxAccount.id,
     });
     if (defaultSig) {
       setSelectedSignatureId(defaultSig.id);
@@ -620,9 +625,15 @@ export const ProjectDetailPage = () => {
     try {
       setSendingEmail(true);
       
+      const mailboxAccount = getProjectMailboxAccount(emailAccounts);
+      if (!mailboxAccount) {
+        toast.error(`Kein aktives Konto für ${projectMailboxEmail} gefunden.`);
+        return;
+      }
+
       // Determine which endpoint to use based on selected account
-      const selectedAccount = emailAccounts.find(a => a.id === composeForm.accountId);
-      const provider = selectedAccount?.provider || "microsoft";
+      const selectedAccount = mailboxAccount;
+      const provider = selectedAccount.provider || "microsoft";
       const endpoint = provider === "gmail" ? "gmail/send" : "microsoft-mail/send";
       
       const response = await fetch(`${API_CONFIG.BASE_URL}/${endpoint}`, {
@@ -635,7 +646,7 @@ export const ProjectDetailPage = () => {
           to: composeForm.to,
           subject: composeForm.subject,
           body: composeForm.body,
-          account_id: composeForm.accountId,
+          account_id: mailboxAccount.id,
           is_html: true,
           attachments: attachments.length > 0 ? attachments.map(a => ({
             filename: a.filename,
