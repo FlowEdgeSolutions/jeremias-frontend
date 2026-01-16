@@ -223,7 +223,7 @@ export const ProjectDetailPage = () => {
   const [showReplyBox, setShowReplyBox] = useState(false);
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const projectMailboxEmail = "vaillant@team-noah.de";
+  const projectMailboxEmail = "projekte@team-noah.de";
 
   const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
 
