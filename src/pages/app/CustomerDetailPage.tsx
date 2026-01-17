@@ -168,7 +168,7 @@ export const CustomerDetailPage = () => {
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const signatureAttachmentInputRef = useRef<HTMLInputElement>(null);
-  const sharedMailboxEmail = "vaillant@team-noah.de";
+  const sharedMailboxEmail = "jv@team-noah.de";
 
   const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
 

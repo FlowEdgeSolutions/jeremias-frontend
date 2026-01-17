@@ -145,7 +145,7 @@ export const EmailsPage = () => {
   const [composeForm, setComposeForm] = useState({ to: "", subject: "", body: "", accountId: "" });
   const [attachments, setAttachments] = useState<EmailAttachment[]>([]);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
-  const sharedMailboxEmail = "projekte@team-noah.de";
+  const sharedMailboxEmail = "jv@team-noah.de";
 
   const normalizeEmail = (value?: string | null) => (value || "").trim().toLowerCase();
 
