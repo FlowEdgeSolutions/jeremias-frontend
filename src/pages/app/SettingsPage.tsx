@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { projectToolsApi, projectsApi, sevdeskApi } from "@/lib/apiClient";
-import type { Project } from "@/types";
+import * as emailAccountsApi from "@/lib/emailAccountsApi";
+import type { EmailAccount, Project } from "@/types";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,10 @@ export const SettingsPage = () => {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [categoryName, setCategoryName] = useState("");
+  const [emailAccounts, setEmailAccounts] = useState<EmailAccount[]>([]);
+  const [emailAccountsLoading, setEmailAccountsLoading] = useState(false);
+  const [emailAccountsConnecting, setEmailAccountsConnecting] = useState(false);
+  const [emailAccountsUpdating, setEmailAccountsUpdating] = useState(false);
   const [projectId, setProjectId] = useState("");
   const [projectNumber, setProjectNumber] = useState("");
   const [projectLookupLoading, setProjectLookupLoading] = useState(false);
@@ -43,8 +48,58 @@ export const SettingsPage = () => {
     }
   };
 
+  const loadEmailAccounts = async () => {
+    try {
+      setEmailAccountsLoading(true);
+      const data = await emailAccountsApi.listEmailAccounts({ includeDisconnected: true });
+      setEmailAccounts(data.accounts || []);
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setEmailAccountsLoading(false);
+    }
+  };
+
+  const connectMicrosoftAccount = async () => {
+    try {
+      setEmailAccountsConnecting(true);
+      const data = await emailAccountsApi.connectEmailAccount("microsoft");
+      window.location.href = data.auth_url;
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setEmailAccountsConnecting(false);
+    }
+  };
+
+  const setPrimaryEmailAccount = async (accountId: string) => {
+    try {
+      setEmailAccountsUpdating(true);
+      await emailAccountsApi.setPrimaryAccount(accountId);
+      await loadEmailAccounts();
+      toast.success("Globaler Absender gesetzt.");
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setEmailAccountsUpdating(false);
+    }
+  };
+
+  const reconnectEmailAccount = async (accountId: string) => {
+    try {
+      setEmailAccountsUpdating(true);
+      const data = await emailAccountsApi.reconnectEmailAccount(accountId);
+      window.location.href = data.auth_url;
+    } catch (error: unknown) {
+      toast.error(formatErrorMessage(error));
+    } finally {
+      setEmailAccountsUpdating(false);
+    }
+  };
+
   useEffect(() => {
     loadCategories();
+    loadEmailAccounts();
   }, []);
 
   const lookupProject = async () => {
@@ -114,9 +169,88 @@ export const SettingsPage = () => {
       <div>
         <h2 className="text-2xl font-bold text-foreground mb-2">Einstellungen</h2>
         <p className="text-muted-foreground">
-          Sevdesk-Integration verwalten und Kategorien f&uuml;r Kontakte anlegen.
+          Sevdesk-Integration, Projekt-Tools und globalen E-Mail-Absender konfigurieren.
         </p>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Microsoft Mail (globaler Absender)</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Verbinde als Admin ein Microsoft-Konto. Dieses wird f&uuml;r den globalen Versand
+            von Projekt-E-Mails verwendet.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="default"
+              onClick={connectMicrosoftAccount}
+              disabled={emailAccountsConnecting || emailAccountsLoading}
+            >
+              {emailAccountsConnecting ? "Verbinde..." : "Microsoft verbinden"}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={loadEmailAccounts}
+              disabled={emailAccountsLoading || emailAccountsConnecting}
+            >
+              {emailAccountsLoading ? "Lade..." : "Aktualisieren"}
+            </Button>
+          </div>
+
+          {emailAccountsLoading ? (
+            <p className="text-sm text-muted-foreground">Lade Microsoft-Konten...</p>
+          ) : (
+            <div className="space-y-3">
+              {emailAccounts.filter((acc) => acc.provider === "microsoft").length === 0 ? (
+                <p className="text-sm text-muted-foreground">Noch kein Microsoft-Konto verbunden.</p>
+              ) : (
+                <div className="space-y-2">
+                  {emailAccounts
+                    .filter((acc) => acc.provider === "microsoft")
+                    .map((account) => (
+                      <div key={account.id} className="flex flex-col gap-2 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <div className="text-sm font-medium text-foreground">{account.email || "Unbekannt"}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Status: {account.status_display}
+                            {account.is_primary ? " · Globaler Absender" : ""}
+                          </div>
+                          {account.last_error && (
+                            <div className="text-xs text-destructive">{account.last_error}</div>
+                          )}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {!account.is_primary && account.status === "active" && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPrimaryEmailAccount(account.id)}
+                              disabled={emailAccountsUpdating}
+                            >
+                              {emailAccountsUpdating ? "Speichere..." : "Als globalen Absender setzen"}
+                            </Button>
+                          )}
+                          {account.needs_reauth && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => reconnectEmailAccount(account.id)}
+                              disabled={emailAccountsUpdating}
+                            >
+                              Neu verbinden
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
