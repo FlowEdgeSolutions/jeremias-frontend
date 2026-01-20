@@ -1,10 +1,10 @@
-import { 
-  Customer, 
+import {
+  Customer,
   CustomerDetails,
   Note,
-  Project, 
-  Invoice, 
-  Message, 
+  Project,
+  Invoice,
+  Message,
   User,
   Lead,
   PipelineStage,
@@ -46,7 +46,7 @@ async function fetchApi<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
-  
+
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...options.headers,
@@ -64,7 +64,7 @@ async function fetchApi<T>(
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-      
+
       try {
         const errorData = await response.json();
         errorMessage = errorData.detail || errorMessage;
@@ -159,10 +159,10 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify(credentials),
     });
-    
+
     // Save token
     setToken(response.access_token);
-    
+
     return response;
   },
 
@@ -389,7 +389,7 @@ export interface ProjectCreateRequest {
   processing_days?: number;
   credits?: string;
   content?: string;
-  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
+  files?: Array<{ id: string; filename: string; size: number; uploaded_at: string }>;
   customer_notes?: string;
   internal_notes?: string;
   // Objektadresse
@@ -412,7 +412,7 @@ export interface ProjectUpdateRequest {
   qc_status?: QcStatus;
   credits?: string;
   content?: string;
-  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
+  files?: Array<{ id: string; filename: string; size: number; uploaded_at: string }>;
   customer_notes?: string;
   internal_notes?: string;
   additional_email?: string;
@@ -726,6 +726,13 @@ export interface EmployeeCredits {
   in_progress_projects: number;
 }
 
+export interface EmployeeSearchResult {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+}
+
 export const usersApi = {
   async getUsers(): Promise<User[]> {
     return fetchApi<User[]>("/users");
@@ -737,6 +744,10 @@ export const usersApi = {
 
   async getEmployeeCredits(): Promise<EmployeeCredits[]> {
     return fetchApi<EmployeeCredits[]>("/users/credits");
+  },
+
+  async quickSearchUsers(q: string, limit: number = 10): Promise<EmployeeSearchResult[]> {
+    return fetchApi<EmployeeSearchResult[]>(`/users/search/quick?q=${encodeURIComponent(q)}&limit=${limit}`);
   },
 };
 

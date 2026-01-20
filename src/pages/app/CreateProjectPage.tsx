@@ -10,7 +10,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Upload, X, Mail, Pencil, ChevronDown, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Upload, X, Mail, Pencil, ChevronDown, Trash2, Search, Check } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 import { formatProjectName } from "@/lib/projectName";
 
 // Default product options
@@ -84,11 +87,11 @@ const saveSpecs = (key: string, specs: typeof DEFAULT_SPECIFICATION_OPTIONS) => 
 
 export const CreateProjectPage = () => {
   const navigate = useNavigate();
-  
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [employees, setEmployees] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
-  
+
   const [formData, setFormData] = useState({
     customer_id: "",
     product_code: "",
@@ -106,13 +109,13 @@ export const CreateProjectPage = () => {
     project_country: "Deutschland",
   });
   const [sendOrderConfirmation, setSendOrderConfirmation] = useState(true);
-  
+
   const [productOptions, setProductOptions] = useState(loadProducts());
   const [allowCustomCredits, setAllowCustomCredits] = useState(false);
   const [showSpecificationDropdown, setShowSpecificationDropdown] = useState(false);
   const [showSpecificationInput, setShowSpecificationInput] = useState(false);
   const [useCustomSpecification, setUseCustomSpecification] = useState(false);
-  const [currentSpecOptions, setCurrentSpecOptions] = useState(() => 
+  const [currentSpecOptions, setCurrentSpecOptions] = useState(() =>
     loadSpecs(STORAGE_KEY_SPECS, DEFAULT_SPECIFICATION_OPTIONS)
   );
   const [heizlastSpecOptions, setHeizlastSpecOptions] = useState(() =>
@@ -120,14 +123,22 @@ export const CreateProjectPage = () => {
   );
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
-  
+
+  // User (Employee) search state
+  const [userSearchQuery, setUserSearchQuery] = useState("");
+  const [isUserPopoverOpen, setIsUserPopoverOpen] = useState(false);
+
+  // Customer search state (optional but helpful)
+  const [customerSearchQuery, setCustomerSearchQuery] = useState("");
+  const [isCustomerPopoverOpen, setIsCustomerPopoverOpen] = useState(false);
+
   // Edit specification inline state
   const [isSpecDropdownOpen, setIsSpecDropdownOpen] = useState(false);
   const specDropdownRef = useRef<HTMLDivElement>(null);
   const [editingInlineIndex, setEditingInlineIndex] = useState<number | null>(null);
   const [inlineEditLabel, setInlineEditLabel] = useState("");
   const [inlineEditPrice, setInlineEditPrice] = useState("");
-  
+
   // Add new product/specification state
   const [isAddingProduct, setIsAddingProduct] = useState(false);
   const [newProductName, setNewProductName] = useState("");
@@ -135,7 +146,7 @@ export const CreateProjectPage = () => {
   const [isAddingSpec, setIsAddingSpec] = useState(false);
   const [newSpecLabel, setNewSpecLabel] = useState("");
   const [newSpecPrice, setNewSpecPrice] = useState("");
-  
+
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -143,11 +154,11 @@ export const CreateProjectPage = () => {
         setIsSpecDropdownOpen(false);
       }
     };
-    
+
     if (isSpecDropdownOpen) {
       document.addEventListener("mousedown", handleClickOutside);
     }
-    
+
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
@@ -190,7 +201,7 @@ export const CreateProjectPage = () => {
         credits: "",
       });
       setAllowCustomCredits(product.allowCustomCredits);
-      
+
       // Show dropdown for "Heizlast" or "Heizlast, hydraulischer Abgleich"
       if (productCode === "HEIZLAST") {
         setShowSpecificationDropdown(true);
@@ -215,7 +226,7 @@ export const CreateProjectPage = () => {
       }
     }
   };
-  
+
   const handleEditSpecification = (index: number, event: React.MouseEvent) => {
     event.stopPropagation();
     const spec = currentSpecOptions[index];
@@ -223,7 +234,7 @@ export const CreateProjectPage = () => {
     setInlineEditLabel(spec.label);
     setInlineEditPrice(spec.net_price);
   };
-  
+
   const handleSaveInlineEdit = (index: number) => {
     const updatedOptions = [...currentSpecOptions];
     const oldSpec = updatedOptions[index];
@@ -233,7 +244,7 @@ export const CreateProjectPage = () => {
       net_price: inlineEditPrice,
     };
     setCurrentSpecOptions(updatedOptions);
-    
+
     // Save to LocalStorage - determine which spec list we're editing
     const isHeizlast = formData.product_code === "HEIZLAST";
     if (isHeizlast) {
@@ -242,7 +253,7 @@ export const CreateProjectPage = () => {
     } else {
       saveSpecs(STORAGE_KEY_SPECS, updatedOptions);
     }
-    
+
     // Update form data if this specification was already selected
     if (formData.product_specification === oldSpec.label) {
       const calculatedCredits = inlineEditPrice ? Math.ceil(parseFloat(inlineEditPrice) / 30).toString() : "";
@@ -253,23 +264,23 @@ export const CreateProjectPage = () => {
         credits: calculatedCredits,
       });
     }
-    
+
     setEditingInlineIndex(null);
     toast.success("Spezifikation aktualisiert");
   };
-  
+
   const handleCancelInlineEdit = () => {
     setEditingInlineIndex(null);
     setInlineEditLabel("");
     setInlineEditPrice("");
   };
-  
+
   const handleDeleteSpecification = (index: number, event: React.MouseEvent) => {
     event.stopPropagation();
     if (window.confirm("Möchten Sie diese Spezifikation wirklich löschen?")) {
       const updatedOptions = currentSpecOptions.filter((_, i) => i !== index);
       setCurrentSpecOptions(updatedOptions);
-      
+
       // Save to LocalStorage
       const isHeizlast = formData.product_code === "HEIZLAST";
       if (isHeizlast) {
@@ -278,7 +289,7 @@ export const CreateProjectPage = () => {
       } else {
         saveSpecs(STORAGE_KEY_SPECS, updatedOptions);
       }
-      
+
       // Clear form data if deleted spec was selected
       if (formData.product_specification === currentSpecOptions[index].label) {
         setFormData({
@@ -288,26 +299,26 @@ export const CreateProjectPage = () => {
           credits: "",
         });
       }
-      
+
       toast.success("Spezifikation gelöscht");
     }
   };
-  
+
   const handleAddSpecification = () => {
     if (!newSpecLabel.trim()) {
       toast.error("Bitte geben Sie eine Bezeichnung ein");
       return;
     }
-    
+
     const newSpec = {
       label: newSpecLabel,
       net_price: newSpecPrice || "",
       units: "",
     };
-    
+
     const updatedOptions = [...currentSpecOptions, newSpec];
     setCurrentSpecOptions(updatedOptions);
-    
+
     // Save to LocalStorage
     const isHeizlast = formData.product_code === "HEIZLAST";
     if (isHeizlast) {
@@ -316,24 +327,24 @@ export const CreateProjectPage = () => {
     } else {
       saveSpecs(STORAGE_KEY_SPECS, updatedOptions);
     }
-    
+
     setNewSpecLabel("");
     setNewSpecPrice("");
     setIsAddingSpec(false);
     toast.success("Spezifikation hinzugefügt");
   };
-  
+
   const handleAddProduct = () => {
     if (!newProductName.trim() || !newProductCode.trim()) {
       toast.error("Bitte geben Sie Name und Code ein");
       return;
     }
-    
+
     // Check if code already exists
     const existingProduct = productOptions.find(p => p.code === newProductCode.toUpperCase());
     if (existingProduct) {
       // Update existing product
-      const updatedProducts = productOptions.map(p => 
+      const updatedProducts = productOptions.map(p =>
         p.code === newProductCode.toUpperCase()
           ? { ...p, name: newProductName }
           : p
@@ -348,25 +359,25 @@ export const CreateProjectPage = () => {
         name: newProductName,
         allowCustomCredits: true,
       };
-      
+
       const updatedProducts = [...productOptions, newProduct];
       setProductOptions(updatedProducts);
       saveProducts(updatedProducts);
       toast.success("Produkt hinzugefügt");
     }
-    
+
     setNewProductName("");
     setNewProductCode("");
     setIsAddingProduct(false);
   };
-  
+
   const handleDeleteProduct = (productCode: string, event: React.MouseEvent) => {
     event.stopPropagation();
     if (window.confirm("Möchten Sie dieses Produkt wirklich löschen?")) {
       const updatedProducts = productOptions.filter(p => p.code !== productCode);
       setProductOptions(updatedProducts);
       saveProducts(updatedProducts);
-      
+
       // Clear form if deleted product was selected
       if (formData.product_code === productCode) {
         setFormData({
@@ -380,11 +391,11 @@ export const CreateProjectPage = () => {
         setShowSpecificationDropdown(false);
         setShowSpecificationInput(false);
       }
-      
+
       toast.success("Produkt gelöscht");
     }
   };
-  
+
 
   const handleSpecificationChange = (specLabel: string) => {
     const spec = currentSpecOptions.find(s => s.label === specLabel);
@@ -443,7 +454,7 @@ export const CreateProjectPage = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.customer_id || !formData.product_code || !formData.assigned_user_id) {
       toast.error("Bitte fülle alle Pflichtfelder aus (Kunde, Produkt und Mitarbeiter)");
       return;
@@ -474,7 +485,7 @@ export const CreateProjectPage = () => {
         project_city: formData.project_city || undefined,
         project_country: formData.project_country || undefined,
       });
-      
+
       // Show success message with order confirmation status
       if (sendOrderConfirmation) {
         if (project.order_confirmation_sent) {
@@ -490,7 +501,7 @@ export const CreateProjectPage = () => {
     } catch (error: unknown) {
       console.error("Error creating project:", error);
       let message = "Unbekannter Fehler";
-      
+
       if (error instanceof Error) {
         if (error.message === "Failed to fetch") {
           message = "Backend nicht erreichbar. Bitte stelle sicher, dass das Backend auf Port 8000 läuft.";
@@ -498,7 +509,7 @@ export const CreateProjectPage = () => {
           message = error.message;
         }
       }
-      
+
       toast.error("Fehler beim Anlegen: " + message);
     } finally {
       setLoading(false);
@@ -522,26 +533,73 @@ export const CreateProjectPage = () => {
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <Label htmlFor="customer">Kunde *</Label>
-              <Select
-                value={formData.customer_id}
-                onValueChange={(value) => setFormData({ ...formData, customer_id: value })}
-              >
-                <SelectTrigger id="customer">
-                  <SelectValue placeholder="Kunde auswählen..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      <div className="flex flex-col">
-                        <span>{customer.name}</span>
-                        {customer.company_name && (
-                          <span className="text-xs text-muted-foreground">{customer.company_name}</span>
+              <Popover open={isCustomerPopoverOpen} onOpenChange={setIsCustomerPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isCustomerPopoverOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    {formData.customer_id
+                      ? customers.find((c) => c.id === formData.customer_id)?.name || "Kunde auswählen..."
+                      : "Kunde auswählen..."}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                  <div className="flex items-center border-b px-3">
+                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                    <input
+                      className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                      placeholder="Kunde suchen..."
+                      value={customerSearchQuery}
+                      onChange={(e) => setCustomerSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <ScrollArea className="h-72">
+                    <div className="p-1">
+                      {customers
+                        .filter((c) =>
+                          c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                          (c.company_name && c.company_name.toLowerCase().includes(customerSearchQuery.toLowerCase()))
+                        )
+                        .map((customer) => (
+                          <div
+                            key={customer.id}
+                            className={cn(
+                              "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                              formData.customer_id === customer.id && "bg-accent"
+                            )}
+                            onClick={() => {
+                              setFormData({ ...formData, customer_id: customer.id });
+                              setIsCustomerPopoverOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.customer_id === customer.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span>{customer.name}</span>
+                              {customer.company_name && (
+                                <span className="text-xs text-muted-foreground">{customer.company_name}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      {customers.filter((c) =>
+                        c.name.toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+                        (c.company_name && c.company_name.toLowerCase().includes(customerSearchQuery.toLowerCase()))
+                      ).length === 0 && (
+                          <div className="py-6 text-center text-sm text-muted-foreground">Kein Kunde gefunden.</div>
                         )}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
             </div>
 
             <div className="space-y-2">
@@ -637,24 +695,71 @@ export const CreateProjectPage = () => {
 
             <div className="space-y-2">
               <Label htmlFor="employee">Mitarbeiter *</Label>
-              <Select
-                value={formData.assigned_user_id}
-                onValueChange={(value) => setFormData({ ...formData, assigned_user_id: value })}
-              >
-                <SelectTrigger id="employee">
-                  <SelectValue placeholder="Mitarbeiter auswählen..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {employees.map((employee) => (
-                    <SelectItem key={employee.id} value={employee.id}>
-                      <div className="flex flex-col">
-                        <span>{employee.name}</span>
-                        <span className="text-xs text-muted-foreground">{employee.email}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={isUserPopoverOpen} onOpenChange={setIsUserPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={isUserPopoverOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    {formData.assigned_user_id
+                      ? employees.find((e) => e.id === formData.assigned_user_id)?.name || "Mitarbeiter auswählen..."
+                      : "Mitarbeiter auswählen..."}
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                  <div className="flex items-center border-b px-3">
+                    <Search className="mr-2 h-4 w-4 shrink-0 opacity-50" />
+                    <input
+                      className="flex h-10 w-full rounded-md bg-transparent py-3 text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed disabled:opacity-50"
+                      placeholder="Mitarbeiter suchen..."
+                      value={userSearchQuery}
+                      onChange={(e) => setUserSearchQuery(e.target.value)}
+                    />
+                  </div>
+                  <ScrollArea className="h-72">
+                    <div className="p-1">
+                      {employees
+                        .filter((e) =>
+                          e.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                          e.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+                        )
+                        .map((employee) => (
+                          <div
+                            key={employee.id}
+                            className={cn(
+                              "relative flex cursor-default select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground",
+                              formData.assigned_user_id === employee.id && "bg-accent"
+                            )}
+                            onClick={() => {
+                              setFormData({ ...formData, assigned_user_id: employee.id });
+                              setIsUserPopoverOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                formData.assigned_user_id === employee.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span>{employee.name}</span>
+                              <span className="text-xs text-muted-foreground">{employee.email}</span>
+                            </div>
+                          </div>
+                        ))}
+                      {employees.filter((e) =>
+                        e.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                        e.email.toLowerCase().includes(userSearchQuery.toLowerCase())
+                      ).length === 0 && (
+                          <div className="py-6 text-center text-sm text-muted-foreground">Kein Mitarbeiter gefunden.</div>
+                        )}
+                    </div>
+                  </ScrollArea>
+                </PopoverContent>
+              </Popover>
             </div>
 
             {showSpecificationDropdown && (
@@ -872,8 +977,8 @@ export const CreateProjectPage = () => {
                   onChange={(e) => {
                     const price = e.target.value;
                     const calculatedCredits = price ? Math.ceil(parseFloat(price) / 30).toString() : "";
-                    setFormData({ 
-                      ...formData, 
+                    setFormData({
+                      ...formData,
                       net_price: price,
                       credits: calculatedCredits
                     });
@@ -915,7 +1020,7 @@ export const CreateProjectPage = () => {
             {/* Objektadresse */}
             <div className="space-y-4 rounded-lg border p-4 bg-muted/20">
               <h3 className="font-medium text-sm text-muted-foreground">Objektadresse</h3>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="project_street">Straße + Hausnummer</Label>
                 <Input
@@ -925,7 +1030,7 @@ export const CreateProjectPage = () => {
                   placeholder="z.B. Musterstraße 123"
                 />
               </div>
-              
+
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="project_zip_code">PLZ</Label>
@@ -946,7 +1051,7 @@ export const CreateProjectPage = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="project_country">Land</Label>
                 <Input
@@ -990,11 +1095,10 @@ export const CreateProjectPage = () => {
             <div className="space-y-2">
               <Label htmlFor="file_upload">Dateien hochladen</Label>
               <div
-                className={`border-2 border-dashed rounded-lg p-6 transition-colors ${
-                  isDragging
+                className={`border-2 border-dashed rounded-lg p-6 transition-colors ${isDragging
                     ? "border-primary bg-primary/5"
                     : "border-muted-foreground/25 hover:border-primary/50"
-                }`}
+                  }`}
                 onDragEnter={handleDragEnter}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
@@ -1018,7 +1122,7 @@ export const CreateProjectPage = () => {
                     className="hidden"
                   />
                 </div>
-                
+
                 {uploadedFiles.length > 0 && (
                   <div className="mt-4 space-y-2">
                     <p className="text-sm font-medium">{uploadedFiles.length} Datei(en) ausgewählt:</p>
