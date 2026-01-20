@@ -857,6 +857,15 @@ export interface DetailedHealth {
   system: ServiceHealth;
 }
 
+export interface MicrosoftDebugResponse {
+  exists: boolean;
+  user_id?: string;
+  user_principal_name?: string;
+  mail?: string;
+  details?: Record<string, any>;
+  error?: string;
+}
+
 export const adminApi = {
   async getSettings(): Promise<SystemSetting[]> {
     return fetchApi<SystemSetting[]>("/admin/settings");
@@ -886,6 +895,13 @@ export const adminApi = {
 
   async getDetailedHealth(): Promise<DetailedHealth> {
     return fetchApi<DetailedHealth>("/admin/health/detailed");
+  },
+
+  async checkMicrosoftUser(email: string): Promise<MicrosoftDebugResponse> {
+    return fetchApi<MicrosoftDebugResponse>("/admin/debug/microsoft/check-user", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
   },
 };
 

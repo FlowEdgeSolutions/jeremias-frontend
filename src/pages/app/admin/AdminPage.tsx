@@ -5,7 +5,8 @@ import { apiClient, DetailedHealth } from "@/lib/apiClient";
 import { HealthStatus } from "@/components/admin/HealthStatus";
 import { LogViewer } from "@/components/admin/LogViewer";
 import { SettingsEditor } from "@/components/admin/SettingsEditor";
-import { Activity, Server, Settings, FileText } from "lucide-react";
+import { MicrosoftDebugger } from "@/components/admin/MicrosoftDebugger";
+import { Activity, Server, Settings, FileText, PenTool } from "lucide-react";
 
 export const AdminPage = () => {
     const [health, setHealth] = useState<DetailedHealth | null>(null);
@@ -72,6 +73,10 @@ export const AdminPage = () => {
                         <Settings className="h-4 w-4 mr-2" />
                         Einstellungen & API Keys
                     </TabsTrigger>
+                    <TabsTrigger value="tools">
+                        <PenTool className="h-4 w-4 mr-2" />
+                        Tools & Debug
+                    </TabsTrigger>
                     <TabsTrigger value="logs">
                         <FileText className="h-4 w-4 mr-2" />
                         Logs
@@ -103,6 +108,10 @@ export const AdminPage = () => {
 
                 <TabsContent value="settings" className="space-y-4">
                     <SettingsEditor />
+                </TabsContent>
+
+                <TabsContent value="tools" className="space-y-4">
+                    <MicrosoftDebugger />
                 </TabsContent>
 
                 <TabsContent value="logs" className="space-y-4">
