@@ -28,18 +28,39 @@ export function MicrosoftDebugger() {
         }
     };
 
+    const handleConnectAccount = async () => {
+        try {
+            setLoading(true);
+            const { url } = await apiClient.mail.getMicrosoftAuthUrl();
+            if (url) {
+                window.location.href = url;
+            }
+        } catch (err: any) {
+            setError(err.message || 'Error initiating connection');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <Search className="h-5 w-5" />
-                        Microsoft Graph User Lookup
-                    </CardTitle>
-                    <CardDescription>
-                        Verify if a user exists in the configured Microsoft Tenant (Azure AD).
-                        This uses the app-only credentials (Client ID/Secret) configured in Settings.
-                    </CardDescription>
+                    <div className="flex items-center justify-between">
+                        <div className="space-y-1">
+                            <CardTitle className="flex items-center gap-2">
+                                <Search className="h-5 w-5" />
+                                Microsoft Graph User Lookup
+                            </CardTitle>
+                            <CardDescription>
+                                Verify if a user exists in the configured Microsoft Tenant (Azure AD).
+                                This uses the app-only credentials (Client ID/Secret) configured in Settings.
+                            </CardDescription>
+                        </div>
+                        <Button variant="outline" onClick={handleConnectAccount} disabled={loading}>
+                            Connect Microsoft Account
+                        </Button>
+                    </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <div className="flex gap-4 items-end">
