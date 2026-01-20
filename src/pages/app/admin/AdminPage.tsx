@@ -5,6 +5,7 @@ import { apiClient, DetailedHealth } from "@/lib/apiClient";
 import { HealthStatus } from "@/components/admin/HealthStatus";
 import { LogViewer } from "@/components/admin/LogViewer";
 import { SettingsEditor } from "@/components/admin/SettingsEditor";
+import { EmailAccountStatus } from "@/components/admin/EmailAccountStatus";
 import { MicrosoftDebugger } from "@/components/admin/MicrosoftDebugger";
 import { Activity, Server, Settings, FileText, PenTool } from "lucide-react";
 
@@ -107,6 +108,7 @@ export const AdminPage = () => {
                 </TabsContent>
 
                 <TabsContent value="settings" className="space-y-4">
+                    <EmailAccountStatus />
                     <SettingsEditor />
                 </TabsContent>
 
