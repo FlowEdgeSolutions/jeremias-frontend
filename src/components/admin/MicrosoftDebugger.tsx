@@ -48,11 +48,18 @@ export function MicrosoftDebugger() {
         try {
             setLoading(true);
             setAccountCheck(null);
-            const response = await fetch('/api/admin/debug/microsoft/check-accounts', {
+            setError(null);
+            const token = localStorage.getItem('token');
+            const response = await fetch(`${import.meta.env.VITE_API_URL || 'https://jeremias-backend-production.up.railway.app'}/api/admin/debug/microsoft/check-accounts`, {
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${token}`
                 }
             });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
             const data = await response.json();
             setAccountCheck(data);
         } catch (err: any) {
