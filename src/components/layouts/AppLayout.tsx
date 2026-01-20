@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTheme } from "@/contexts/ThemeContext";
-import { 
-  LayoutDashboard, 
-  Users, 
-  FolderKanban, 
-  Receipt, 
-  CheckCircle2, 
+import {
+  LayoutDashboard,
+  Users,
+  FolderKanban,
+  Receipt,
+  CheckCircle2,
   LogOut,
   UserCircle2,
   ChevronLeft,
@@ -19,6 +19,7 @@ import {
   Mail,
   Archive,
   UsersRound,
+  Shield,
   LucideIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -93,6 +94,7 @@ export const AppLayout = () => {
     ...(isAdmin ? [{
       category: "Administration",
       items: [
+        { path: "/app/admin", label: "Admin Dashboard", icon: Shield },
         { path: "/app/users", label: "Accounts", icon: UsersRound },
       ]
     }] : []),
@@ -108,9 +110,9 @@ export const AppLayout = () => {
       {/* Header with Toggle */}
       <div className="p-6 border-b border-sidebar-border flex items-center justify-between">
         <div className={`transition-opacity duration-200 ${(isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0" : "opacity-100"}`}>
-          <img 
-            src="/teamnoahLogo.png" 
-            alt="Team Noah Logo" 
+          <img
+            src="/teamnoahLogo.png"
+            alt="Team Noah Logo"
             className="h-8 w-auto dark:invert"
           />
           <p className="text-sm text-sidebar-foreground/70 mt-1 whitespace-nowrap">
@@ -143,9 +145,8 @@ export const AppLayout = () => {
         {navCategories.map((category, catIndex) => (
           <div key={category.category} className="space-y-1">
             {/* Category Label - hidden when collapsed */}
-            <div className={`px-4 py-1 transition-all duration-200 ${
-              (isCollapsed && !isHovered) && !isMobile ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
-            }`}>
+            <div className={`px-4 py-1 transition-all duration-200 ${(isCollapsed && !isHovered) && !isMobile ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
+              }`}>
               <span className="text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
                 {category.category}
               </span>
@@ -159,17 +160,15 @@ export const AppLayout = () => {
               <Link
                 key={item.path}
                 to={item.path}
-                className={`flex items-center gap-3 px-4 py-2.5 rounded-md transition-all duration-200 ${
-                  isActive(item.path)
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/50"
-                } ${(isCollapsed && !isHovered) && !isMobile ? "justify-center" : ""}`}
+                className={`flex items-center gap-3 px-4 py-2.5 rounded-md transition-all duration-200 ${isActive(item.path)
+                  ? "bg-sidebar-accent text-sidebar-accent-foreground font-medium"
+                  : "text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  } ${(isCollapsed && !isHovered) && !isMobile ? "justify-center" : ""}`}
                 title={(isCollapsed && !isHovered) && !isMobile ? item.label : undefined}
               >
                 <item.icon className="h-5 w-5 flex-shrink-0" />
-                <span className={`transition-all duration-200 whitespace-nowrap ${
-                  (isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-                }`}>
+                <span className={`transition-all duration-200 whitespace-nowrap ${(isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
+                  }`}>
                   {item.label}
                 </span>
               </Link>
@@ -183,9 +182,8 @@ export const AppLayout = () => {
         <Button
           variant="ghost"
           onClick={toggleTheme}
-          className={`w-full text-sidebar-foreground hover:bg-sidebar-accent ${
-            (isCollapsed && !isHovered) && !isMobile ? "justify-center px-2" : "justify-start"
-          }`}
+          className={`w-full text-sidebar-foreground hover:bg-sidebar-accent ${(isCollapsed && !isHovered) && !isMobile ? "justify-center px-2" : "justify-start"
+            }`}
           title={(isCollapsed && !isHovered) && !isMobile ? (theme === "light" ? "Dark Mode" : "Light Mode") : undefined}
         >
           {theme === "light" ? (
@@ -193,9 +191,8 @@ export const AppLayout = () => {
           ) : (
             <Sun className={`h-5 w-5 flex-shrink-0 ${(isCollapsed && !isHovered) && !isMobile ? "" : "mr-2"}`} />
           )}
-          <span className={`transition-all duration-200 truncate ${
-            (isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-          }`}>
+          <span className={`transition-all duration-200 truncate ${(isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
+            }`}>
             {theme === "light" ? "Dark Mode" : "Light Mode"}
           </span>
         </Button>
@@ -203,15 +200,13 @@ export const AppLayout = () => {
         {/* Profile Link */}
         <Link
           to="/app/profile"
-          className={`flex items-center w-full text-sidebar-foreground hover:bg-sidebar-accent rounded-md px-4 py-2 transition-colors ${
-            (isCollapsed && !isHovered) && !isMobile ? "justify-center px-2" : "justify-start"
-          } ${isActive("/app/profile") ? "bg-sidebar-accent" : ""}`}
+          className={`flex items-center w-full text-sidebar-foreground hover:bg-sidebar-accent rounded-md px-4 py-2 transition-colors ${(isCollapsed && !isHovered) && !isMobile ? "justify-center px-2" : "justify-start"
+            } ${isActive("/app/profile") ? "bg-sidebar-accent" : ""}`}
           title={(isCollapsed && !isHovered) && !isMobile ? currentUser?.name : undefined}
         >
           <UserCircle2 className={`h-5 w-5 flex-shrink-0 ${(isCollapsed && !isHovered) && !isMobile ? "" : "mr-2"}`} />
-          <span className={`transition-all duration-200 truncate ${
-            (isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-          }`}>
+          <span className={`transition-all duration-200 truncate ${(isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
+            }`}>
             {currentUser?.name}
           </span>
         </Link>
@@ -220,15 +215,13 @@ export const AppLayout = () => {
         <Button
           variant="ghost"
           onClick={logout}
-          className={`w-full text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive ${
-            (isCollapsed && !isHovered) && !isMobile ? "justify-center px-2" : "justify-start"
-          }`}
+          className={`w-full text-sidebar-foreground hover:bg-destructive/10 hover:text-destructive ${(isCollapsed && !isHovered) && !isMobile ? "justify-center px-2" : "justify-start"
+            }`}
           title={(isCollapsed && !isHovered) && !isMobile ? "Abmelden" : undefined}
         >
           <LogOut className={`h-5 w-5 flex-shrink-0 ${(isCollapsed && !isHovered) && !isMobile ? "" : "mr-2"}`} />
-          <span className={`transition-all duration-200 truncate ${
-            (isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
-          }`}>
+          <span className={`transition-all duration-200 truncate ${(isCollapsed && !isHovered) && !isMobile ? "opacity-0 w-0 overflow-hidden" : "opacity-100"
+            }`}>
             Abmelden
           </span>
         </Button>
@@ -240,7 +233,7 @@ export const AppLayout = () => {
     <div className="flex h-screen w-full bg-background overflow-hidden">
       {/* Mobile Overlay */}
       {isMobile && isMobileMenuOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 animate-fade-in"
           onClick={() => setIsMobileMenuOpen(false)}
         />
@@ -248,10 +241,9 @@ export const AppLayout = () => {
 
       {/* Sidebar - Desktop */}
       {!isMobile && (
-        <aside 
-          className={`bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-300 ease-in-out h-screen flex-shrink-0 ${
-            (isCollapsed && !isHovered) ? "w-20" : "w-64"
-          }`}
+        <aside
+          className={`bg-sidebar border-r border-sidebar-border flex flex-col transition-all duration-300 ease-in-out h-screen flex-shrink-0 ${(isCollapsed && !isHovered) ? "w-20" : "w-64"
+            }`}
           onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
         >
@@ -261,10 +253,9 @@ export const AppLayout = () => {
 
       {/* Sidebar - Mobile (Drawer) */}
       {isMobile && (
-        <aside 
-          className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-300 ease-in-out ${
-            isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-          }`}
+        <aside
+          className={`fixed inset-y-0 left-0 z-50 w-64 bg-sidebar border-r border-sidebar-border flex flex-col transition-transform duration-300 ease-in-out ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+            }`}
         >
           <SidebarContent />
         </aside>

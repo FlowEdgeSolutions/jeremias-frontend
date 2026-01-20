@@ -829,6 +829,66 @@ export const customerPortalApi = {
 
 };
 
+// ============================================================================
+// ADMIN API
+// ============================================================================
+
+export interface SystemSetting {
+  key: string;
+  value: string;
+  description?: string;
+  is_secret: boolean;
+  updated_at: string;
+}
+
+export interface LogResponse {
+  logs: string[];
+}
+
+export interface ServiceHealth {
+  status: "healthy" | "unhealthy" | "warning";
+  message: string;
+}
+
+export interface DetailedHealth {
+  database: ServiceHealth;
+  sevdesk: ServiceHealth;
+  microsoft: ServiceHealth;
+  system: ServiceHealth;
+}
+
+export const adminApi = {
+  async getSettings(): Promise<SystemSetting[]> {
+    return fetchApi<SystemSetting[]>("/admin/settings");
+  },
+
+  async createSetting(data: Partial<SystemSetting>): Promise<SystemSetting> {
+    return fetchApi<SystemSetting>("/admin/settings", {
+      method: "POST",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async updateSetting(key: string, data: Partial<SystemSetting>): Promise<SystemSetting> {
+    return fetchApi<SystemSetting>(`/admin/settings/${key}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    });
+  },
+
+  async deleteSetting(key: string): Promise<void> {
+    return fetchApi<void>(`/admin/settings/${key}`, { method: "DELETE" });
+  },
+
+  async getLogs(lines: number = 100): Promise<LogResponse> {
+    return fetchApi<LogResponse>(`/admin/logs?lines=${lines}`);
+  },
+
+  async getDetailedHealth(): Promise<DetailedHealth> {
+    return fetchApi<DetailedHealth>("/admin/health/detailed");
+  },
+};
+
 export const apiClient = {
   auth: authApi,
   leads: leadsApi,
@@ -841,6 +901,7 @@ export const apiClient = {
   projectTools: projectToolsApi,
   users: usersApi,
   customerPortal: customerPortalApi,
+  admin: adminApi,
 };
 
 export { ApiError, getToken, setToken, removeToken };
