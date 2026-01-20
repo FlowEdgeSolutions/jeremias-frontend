@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/apiClient';
+import * as emailAccountsApi from '@/lib/emailAccountsApi';
 import { Loader2, CheckCircle2, XCircle, Search, AlertTriangle } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
@@ -31,9 +32,9 @@ export function MicrosoftDebugger() {
     const handleConnectAccount = async () => {
         try {
             setLoading(true);
-            const { url } = await apiClient.mail.getMicrosoftAuthUrl();
-            if (url) {
-                window.location.href = url;
+            const data = await emailAccountsApi.connectEmailAccount("microsoft");
+            if (data.auth_url) {
+                window.location.href = data.auth_url;
             }
         } catch (err: any) {
             setError(err.message || 'Error initiating connection');

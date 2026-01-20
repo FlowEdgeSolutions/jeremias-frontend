@@ -830,16 +830,6 @@ export const customerPortalApi = {
 };
 
 // ============================================================================
-// MAIL API
-// ============================================================================
-
-export const mailApi = {
-  async getMicrosoftAuthUrl(): Promise<{ url: string }> {
-    return fetchApi<{ url: string }>("/microsoft-mail/auth/url");
-  },
-};
-
-// ============================================================================
 // ADMIN API
 // ============================================================================
 
@@ -928,7 +918,6 @@ export const apiClient = {
   users: usersApi,
   customerPortal: customerPortalApi,
   admin: adminApi,
-  mail: mailApi,
 };
 
 export { ApiError, getToken, setToken, removeToken };
