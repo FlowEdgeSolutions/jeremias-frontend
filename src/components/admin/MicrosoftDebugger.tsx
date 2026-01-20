@@ -13,6 +13,7 @@ export function MicrosoftDebugger() {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
+    const [accountCheck, setAccountCheck] = useState<any>(null);
 
     const checkUser = async () => {
         if (!email) return;
@@ -43,6 +44,24 @@ export function MicrosoftDebugger() {
         }
     };
 
+    const checkAccounts = async () => {
+        try {
+            setLoading(true);
+            setAccountCheck(null);
+            const response = await fetch('/api/admin/debug/microsoft/check-accounts', {
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                }
+            });
+            const data = await response.json();
+            setAccountCheck(data);
+        } catch (err: any) {
+            setError(err.message || 'Error checking accounts');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     return (
         <div className="space-y-6">
             <Card>
@@ -58,9 +77,14 @@ export function MicrosoftDebugger() {
                                 This uses the app-only credentials (Client ID/Secret) configured in Settings.
                             </CardDescription>
                         </div>
-                        <Button variant="outline" onClick={handleConnectAccount} disabled={loading}>
-                            Connect Microsoft Account
-                        </Button>
+                        <div className="flex gap-2">
+                            <Button variant="outline" onClick={checkAccounts} disabled={loading}>
+                                Verify Accounts
+                            </Button>
+                            <Button variant="outline" onClick={handleConnectAccount} disabled={loading}>
+                                Connect Microsoft Account
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -151,6 +175,65 @@ export function MicrosoftDebugger() {
                     )}
                 </CardContent>
             </Card>
+
+            {accountCheck && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Connected Account Verification</CardTitle>
+                        <CardDescription>
+                            Verifies that stored email addresses match the actual Microsoft accounts
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="space-y-3">
+                            {accountCheck.accounts?.map((acc: any) => (
+                                <div key={acc.account_id} className="p-4 border rounded-lg">
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span className="font-medium text-muted-foreground">Stored Email:</span>
+                                            <div className="font-mono">{acc.stored_email}</div>
+                                        </div>
+                                        <div>
+                                            <span className="font-medium text-muted-foreground">Actual Email:</span>
+                                            <div className="font-mono">{acc.actual_email || 'N/A'}</div>
+                                        </div>
+                                        <div>
+                                            <span className="font-medium text-muted-foreground">Display Name:</span>
+                                            <div>{acc.display_name || '-'}</div>
+                                        </div>
+                                        <div>
+                                            <span className="font-medium text-muted-foreground">Status:</span>
+                                            <div className="flex items-center gap-2">
+                                                {acc.match ? (
+                                                    <>
+                                                        <CheckCircle2 className="h-4 w-4 text-green-600" />
+                                                        <span className="text-green-600">Match</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <XCircle className="h-4 w-4 text-red-600" />
+                                                        <span className="text-red-600">Mismatch!</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    {!acc.match && (
+                                        <Alert variant="destructive" className="mt-3">
+                                            <AlertTriangle className="h-4 w-4" />
+                                            <AlertTitle>Email Mismatch Detected</AlertTitle>
+                                            <AlertDescription>
+                                                The stored email ({acc.stored_email}) does not match the actual connected account ({acc.actual_email || 'unknown'}).
+                                                This will cause sending errors. Please reconnect this account.
+                                            </AlertDescription>
+                                        </Alert>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
         </div>
     );
 }
