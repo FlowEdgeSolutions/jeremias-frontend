@@ -44,8 +44,12 @@ export const QualityPage = () => {
         return;
       }
       setQcActionLoadingId(projectId);
-      await qcApi.approveProject(projectId);
+      const result = await qcApi.approveProject(projectId);
       toast.success("Projekt freigegeben!");
+      if (!result.email_sent) {
+        const detail = result.email_error ? ` ${result.email_error}` : "";
+        toast.warning(`Rechnung erstellt, aber E-Mail nicht gesendet.${detail}`);
+      }
       loadProjects();
     } catch (error: unknown) {
       toast.error(formatErrorMessage(error));

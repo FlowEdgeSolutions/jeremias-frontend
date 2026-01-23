@@ -97,6 +97,12 @@ export interface Project {
   updatedAt?: Date;
 }
 
+export interface ProjectApproveResponse {
+  project: Project;
+  email_sent: boolean;
+  email_error?: string;
+}
+
 export interface Invoice {
   id: string;
   customer_id: string;

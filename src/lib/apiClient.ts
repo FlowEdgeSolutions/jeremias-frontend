@@ -1,10 +1,11 @@
-import {
-  Customer,
+import { 
+  Customer, 
   CustomerDetails,
   Note,
   Project,
-  Invoice,
-  Message,
+  ProjectApproveResponse,
+  Invoice, 
+  Message, 
   User,
   Lead,
   PipelineStage,
@@ -46,7 +47,7 @@ async function fetchApi<T>(
   options: RequestInit = {}
 ): Promise<T> {
   const token = getToken();
-
+  
   const headers: HeadersInit = {
     "Content-Type": "application/json",
     ...options.headers,
@@ -64,7 +65,7 @@ async function fetchApi<T>(
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-
+      
       try {
         const errorData = await response.json();
         errorMessage = errorData.detail || errorMessage;
@@ -159,10 +160,10 @@ export const authApi = {
       method: "POST",
       body: JSON.stringify(credentials),
     });
-
+    
     // Save token
     setToken(response.access_token);
-
+    
     return response;
   },
 
@@ -389,7 +390,7 @@ export interface ProjectCreateRequest {
   processing_days?: number;
   credits?: string;
   content?: string;
-  files?: Array<{ id: string; filename: string; size: number; uploaded_at: string }>;
+  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
   customer_notes?: string;
   internal_notes?: string;
   // Objektadresse
@@ -412,7 +413,7 @@ export interface ProjectUpdateRequest {
   qc_status?: QcStatus;
   credits?: string;
   content?: string;
-  files?: Array<{ id: string; filename: string; size: number; uploaded_at: string }>;
+  files?: Array<{id: string; filename: string; size: number; uploaded_at: string}>;
   customer_notes?: string;
   internal_notes?: string;
   additional_email?: string;
@@ -657,8 +658,8 @@ export const qcApi = {
     return fetchApi<Project[]>(`/qc/projects?qc_status=${qcStatus}`);
   },
 
-  async approveProject(id: string): Promise<Project> {
-    return fetchApi<Project>(`/qc/projects/${id}/approve`, {
+  async approveProject(id: string): Promise<ProjectApproveResponse> {
+    return fetchApi<ProjectApproveResponse>(`/qc/projects/${id}/approve`, {
       method: "POST",
     });
   },
@@ -726,13 +727,6 @@ export interface EmployeeCredits {
   in_progress_projects: number;
 }
 
-export interface EmployeeSearchResult {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-}
-
 export const usersApi = {
   async getUsers(): Promise<User[]> {
     return fetchApi<User[]>("/users");
@@ -744,10 +738,6 @@ export const usersApi = {
 
   async getEmployeeCredits(): Promise<EmployeeCredits[]> {
     return fetchApi<EmployeeCredits[]>("/users/credits");
-  },
-
-  async quickSearchUsers(q: string, limit: number = 10): Promise<EmployeeSearchResult[]> {
-    return fetchApi<EmployeeSearchResult[]>(`/users/search/quick?q=${encodeURIComponent(q)}&limit=${limit}`);
   },
 };
 
@@ -829,82 +819,6 @@ export const customerPortalApi = {
 
 };
 
-// ============================================================================
-// ADMIN API
-// ============================================================================
-
-export interface SystemSetting {
-  key: string;
-  value: string;
-  description?: string;
-  is_secret: boolean;
-  updated_at: string;
-}
-
-export interface LogResponse {
-  logs: string[];
-}
-
-export interface ServiceHealth {
-  status: "healthy" | "unhealthy" | "warning";
-  message: string;
-}
-
-export interface DetailedHealth {
-  database: ServiceHealth;
-  sevdesk: ServiceHealth;
-  microsoft: ServiceHealth;
-  system: ServiceHealth;
-}
-
-export interface MicrosoftDebugResponse {
-  exists: boolean;
-  user_id?: string;
-  user_principal_name?: string;
-  mail?: string;
-  details?: Record<string, any>;
-  error?: string;
-}
-
-export const adminApi = {
-  async getSettings(): Promise<SystemSetting[]> {
-    return fetchApi<SystemSetting[]>("/admin/settings");
-  },
-
-  async createSetting(data: Partial<SystemSetting>): Promise<SystemSetting> {
-    return fetchApi<SystemSetting>("/admin/settings", {
-      method: "POST",
-      body: JSON.stringify(data),
-    });
-  },
-
-  async updateSetting(key: string, data: Partial<SystemSetting>): Promise<SystemSetting> {
-    return fetchApi<SystemSetting>(`/admin/settings/${key}`, {
-      method: "PATCH",
-      body: JSON.stringify(data),
-    });
-  },
-
-  async deleteSetting(key: string): Promise<void> {
-    return fetchApi<void>(`/admin/settings/${key}`, { method: "DELETE" });
-  },
-
-  async getLogs(lines: number = 100): Promise<LogResponse> {
-    return fetchApi<LogResponse>(`/admin/logs?lines=${lines}`);
-  },
-
-  async getDetailedHealth(): Promise<DetailedHealth> {
-    return fetchApi<DetailedHealth>("/admin/health/detailed");
-  },
-
-  async checkMicrosoftUser(email: string): Promise<MicrosoftDebugResponse> {
-    return fetchApi<MicrosoftDebugResponse>("/admin/debug/microsoft/check-user", {
-      method: "POST",
-      body: JSON.stringify({ email }),
-    });
-  },
-};
-
 export const apiClient = {
   auth: authApi,
   leads: leadsApi,
@@ -917,7 +831,6 @@ export const apiClient = {
   projectTools: projectToolsApi,
   users: usersApi,
   customerPortal: customerPortalApi,
-  admin: adminApi,
 };
 
 export { ApiError, getToken, setToken, removeToken };

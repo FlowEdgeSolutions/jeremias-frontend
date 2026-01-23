@@ -1059,8 +1059,12 @@ export const ProjectDetailPage = () => {
     
     try {
       setQcActionLoading(true);
-      await qcApi.approveProject(id);
+      const result = await qcApi.approveProject(id);
       toast.success("Projekt freigegeben und ins Archiv verschoben!");
+      if (!result.email_sent) {
+        const detail = result.email_error ? ` ${result.email_error}` : "";
+        toast.warning(`Rechnung erstellt, aber E-Mail nicht gesendet.${detail}`);
+      }
       loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
     } catch (error: unknown) {
       toast.error(formatErrorMessage(error));

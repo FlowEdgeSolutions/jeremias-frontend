@@ -14,7 +14,7 @@ export function EmailAccountStatus() {
 
     const requiredAccounts = [
         { email: "jv@team-noah.de", purpose: "Manuelle E-Mails" },
-        { email: "vaillant@team-noah.de", purpose: "Automatische E-Mails" }
+        { email: "info@team-noah.de", purpose: "Automatische E-Mails" }
     ];
 
     useEffect(() => {
