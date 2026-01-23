@@ -53,8 +53,10 @@ export const QualityPage = () => {
       if (!result.email_sent) {
         const detail = result.email_error ? ` ${result.email_error}` : "";
         toast.warning(`Rechnung erstellt, aber E-Mail nicht gesendet.${detail}`);
+        approvalProgress.finishError(result.email_error || "E-Mail wurde nicht gesendet.");
+      } else {
+        approvalProgress.finishSuccess(true);
       }
-      approvalProgress.finishSuccess(result.email_sent);
       loadProjects();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unbekannter Fehler";
