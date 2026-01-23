@@ -17,6 +17,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { ArrowLeft, Save, FileText, Trash2, AlertTriangle, Mic, MicOff, Plus, CheckCircle2, XCircle, Mail, Send, Paperclip, Reply, FileDown, X, Inbox, Eye, ExternalLink, Upload, Loader2 } from "lucide-react";
 import { RichTextEditor } from "@/components/common/RichTextEditor";
+import { ApprovalProgressDialog } from "@/components/common/ApprovalProgressDialog";
+import { useApprovalProgress } from "@/hooks/useApprovalProgress";
 import { API_CONFIG, TOKEN_KEY } from "@/config/api";
 
 interface EmailMessage {
@@ -105,6 +107,7 @@ export const ProjectDetailPage = () => {
   const [projectInvoice, setProjectInvoice] = useState<Invoice | null>(null);
   const [invoiceLoading, setInvoiceLoading] = useState(false);
   const [qcActionLoading, setQcActionLoading] = useState(false);
+  const approvalProgress = useApprovalProgress();
 
   type ProjectNote = { id: string; text: string; created_at: string };
 
@@ -1059,14 +1062,18 @@ export const ProjectDetailPage = () => {
     
     try {
       setQcActionLoading(true);
+      approvalProgress.start();
       const result = await qcApi.approveProject(id);
       toast.success("Projekt freigegeben und ins Archiv verschoben!");
       if (!result.email_sent) {
         const detail = result.email_error ? ` ${result.email_error}` : "";
         toast.warning(`Rechnung erstellt, aber E-Mail nicht gesendet.${detail}`);
       }
+      approvalProgress.finishSuccess(result.email_sent);
       loadProject(); // Projekt neu laden, um aktualisierte Daten zu erhalten
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      approvalProgress.finishError(message);
       toast.error(formatErrorMessage(error));
     } finally {
       setQcActionLoading(false);
@@ -2611,6 +2618,14 @@ export const ProjectDetailPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ApprovalProgressDialog
+        open={approvalProgress.open}
+        onOpenChange={approvalProgress.onOpenChange}
+        title="Freigabe laeuft"
+        description="Die Schritte werden nacheinander abgearbeitet."
+        steps={approvalProgress.steps}
+      />
 
     </div>
   );

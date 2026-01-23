@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { ApprovalProgressDialog } from "@/components/common/ApprovalProgressDialog";
+import { useApprovalProgress } from "@/hooks/useApprovalProgress";
 
 export const QualityPage = () => {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [qcActionLoadingId, setQcActionLoadingId] = useState<string | null>(null);
+  const approvalProgress = useApprovalProgress();
   const navigate = useNavigate();
 
   const formatErrorMessage = (error: unknown) => {
@@ -44,14 +47,18 @@ export const QualityPage = () => {
         return;
       }
       setQcActionLoadingId(projectId);
+      approvalProgress.start();
       const result = await qcApi.approveProject(projectId);
       toast.success("Projekt freigegeben!");
       if (!result.email_sent) {
         const detail = result.email_error ? ` ${result.email_error}` : "";
         toast.warning(`Rechnung erstellt, aber E-Mail nicht gesendet.${detail}`);
       }
+      approvalProgress.finishSuccess(result.email_sent);
       loadProjects();
     } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unbekannter Fehler";
+      approvalProgress.finishError(message);
       toast.error(formatErrorMessage(error));
     } finally {
       setQcActionLoadingId(null);
@@ -153,6 +160,14 @@ export const QualityPage = () => {
           </Card>
         )}
       </div>
+
+      <ApprovalProgressDialog
+        open={approvalProgress.open}
+        onOpenChange={approvalProgress.onOpenChange}
+        title="Freigabe laeuft"
+        description="Die Schritte werden nacheinander abgearbeitet."
+        steps={approvalProgress.steps}
+      />
     </div>
   );
 };
